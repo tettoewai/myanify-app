@@ -17,6 +17,7 @@ export const apiClient = {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
+      console.error("API request failed:", error);
       throw new Error(
         error.message || `API request failed with status ${response.status}`
       );

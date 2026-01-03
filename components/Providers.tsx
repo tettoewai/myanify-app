@@ -19,10 +19,10 @@ const config: HeroUINativeConfig = {
       placement: "top",
     },
     insets: {
-      top: 0,
-      bottom: 6,
-      left: 12,
-      right: 12,
+      top: 20,
+      bottom: 20,
+      left: 20,
+      right: 20,
     },
   },
 };

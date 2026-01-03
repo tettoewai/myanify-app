@@ -1,4 +1,10 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
 import { authStorage } from "@/lib/auth-storage";
 import { useRouter, useSegments } from "expo-router";
 
@@ -26,7 +32,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const inAuthGroup = segments[0] === "(auth)";
     const inTabsGroup = segments[0] === "(tabs)";
-    const isLandingPage = segments.length === 0 || (segments.length === 1 && segments[0] === "index");
 
     if (!token && inTabsGroup) {
       // Redirect to landing page if not signed in and trying to access protected routes

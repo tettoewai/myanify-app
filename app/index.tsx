@@ -8,6 +8,7 @@ import "../global.css";
 
 export default function Index() {
   const { token, isLoading } = useAuth();
+  const insets = useSafeAreaInsets();
 
   if (isLoading) return null;
 
@@ -47,8 +48,6 @@ export default function Index() {
     { value: "25K+", label: "Listeners" },
   ];
 
-  const insets = useSafeAreaInsets();
-
   return (
     <View
       style={{
@@ -64,7 +63,7 @@ export default function Index() {
         contentContainerStyle={{ paddingBottom: 40 }}
       >
         {/* Hero Section */}
-        <View className="px-6 pt-16 pb-12 items-center">
+        <View className="px-6 pt-5 pb-12 items-center">
           <View className="bg-primary/10 px-4 py-2 rounded-full border border-primary/20 mb-6 flex-row items-center">
             <Ionicons name="sparkles" size={16} color="#ff0000" />
             <Text className="text-primary text-xs font-bold ml-2 uppercase tracking-wider">
