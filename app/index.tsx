@@ -58,10 +58,7 @@ export default function Index() {
       }}
       className="flex-1 bg-background"
     >
-      <ScrollView
-        className="flex-1 pt-10"
-        contentContainerStyle={{ paddingBottom: 40 }}
-      >
+      <ScrollView className="flex-1 pt-10" contentContainerClassName="pb-10">
         {/* Hero Section */}
         <View className="px-6 pt-5 pb-12 items-center">
           <View className="bg-primary/10 px-4 py-2 rounded-full border border-primary/20 mb-6 flex-row items-center">
@@ -83,13 +80,11 @@ export default function Index() {
 
           <View className="flex-row gap-4 mt-10 w-full">
             <Link href="/login" asChild>
-              <Button className="flex-1 rounded-sm bg-primary h-14">
-                <View className="flex-row items-center justify-center">
-                  <Ionicons name="play" size={20} color="white" />
-                  <Button.Label className="text-primary-foreground font-bold ml-2">
-                    Start Listening
-                  </Button.Label>
-                </View>
+              <Button variant="primary" size="lg" className="flex-1 rounded-sm">
+                <Ionicons name="play" size={20} color="white" />
+                <Button.Label className="font-bold ml-2">
+                  Start Listening
+                </Button.Label>
               </Button>
             </Link>
           </View>

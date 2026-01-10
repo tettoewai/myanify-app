@@ -1,15 +1,17 @@
-import { Ionicons } from "@expo/vector-icons";
-import { Button, TextField, useToast, Toast } from "heroui-native";
-import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
 import { authStorage } from "@/lib/auth-storage";
+import { Ionicons } from "@expo/vector-icons";
 import { useMutation } from "@tanstack/react-query";
-import * as WebBrowser from "expo-web-browser";
-import { Platform } from "react-native";
 import { makeRedirectUri, useAuthRequest } from "expo-auth-session";
 import Constants from "expo-constants";
+import * as WebBrowser from "expo-web-browser";
+import { Button, Spinner, TextField, useToast } from "heroui-native";
+import { useEffect, useState } from "react";
+import { Platform, Pressable, Text, View } from "react-native";
+import { withUniwind } from "uniwind";
+
+const StyledIonicons = withUniwind(Ionicons);
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -25,6 +27,7 @@ export default function Login() {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isVisible, setIsVisible] = useState(false);
 
   const loginMutation = useMutation({
     mutationFn: async () => {
@@ -47,7 +50,18 @@ export default function Login() {
       await signIn(token);
     },
     onError: (error: any) => {
-      const errorMessage = error.message || "Something went wrong";
+      console.log("Login response:", error);
+      let errorMessage = error.message || "Something went wrong";
+
+      if (
+        errorMessage.includes("Network request failed") ||
+        errorMessage.includes("Connection to") ||
+        errorMessage.includes("failed")
+      ) {
+        errorMessage =
+          "Connection to server failed. Please ensure your backend is running and both devices are on the same Wi-Fi.";
+      }
+
       const statusCode = error.response?.status;
       toast.show({
         variant: "danger",
@@ -148,19 +162,26 @@ export default function Login() {
         </View>
         <View className="mt-4">
           <Button
+            variant="tertiary"
             pressableFeedbackVariant="ripple"
             className="w-full rounded-sm"
             size="sm"
             onPress={handleGoogleLogin}
             isDisabled={!request || googleLoginMutation.isPending}
           >
-            <Ionicons
-              name="logo-google"
-              size={18}
-              color="white"
-              style={{ marginRight: 8 }}
-            />
-            <Button.Label>Continue with Google</Button.Label>
+            {googleLoginMutation.isPending ? (
+              <Spinner color="white" size="sm" />
+            ) : (
+              <>
+                <Ionicons
+                  name="logo-google"
+                  size={18}
+                  color="white"
+                  className="mr-2"
+                />
+                <Button.Label>Continue with Google</Button.Label>
+              </>
+            )}
           </Button>
         </View>
         <View className="relative mt-2 flex-row items-center justify-center">
@@ -171,27 +192,27 @@ export default function Login() {
             </Text>
           </View>
         </View>
-        <View className="gap-2 mt-2">
+        <View className="gap-4 mt-2">
           <TextField isRequired isInvalid={isInvalidEmail}>
             <TextField.Label>Email Address</TextField.Label>
-            <TextField.Input
-              placeholder="Enter your email"
-              placeholderTextColor="rgb(107, 114, 128, 0.5)"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={email}
-              onChangeText={setEmail}
-              className="rounded-sm"
-              editable={!loginMutation.isPending}
-            >
-              <TextField.InputStartContent>
-                <Ionicons
-                  name="mail-outline"
-                  size={16}
-                  className="text-muted-foreground"
-                />
-              </TextField.InputStartContent>
-            </TextField.Input>
+            <View className="w-full flex-row items-center">
+              <TextField.Input
+                placeholder="Enter your email"
+                placeholderTextColor="rgb(107, 114, 128, 0.5)"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+                className="flex-1 px-10 rounded-sm"
+                editable={!loginMutation.isPending}
+              />
+              <StyledIonicons
+                name="mail-outline"
+                size={16}
+                className="absolute left-3.5 text-muted-foreground"
+                pointerEvents="none"
+              />
+            </View>
             <TextField.ErrorMessage>
               Please enter a valid email address
             </TextField.ErrorMessage>
@@ -199,41 +220,48 @@ export default function Login() {
 
           <TextField isRequired>
             <TextField.Label>Password</TextField.Label>
-            <TextField.Input
-              placeholder="Enter password"
-              placeholderTextColor="rgb(107, 114, 128, 0.5)"
-              secureTextEntry
-              className="rounded-sm"
-              value={password}
-              onChangeText={setPassword}
-              editable={!loginMutation.isPending}
-            >
-              <TextField.InputStartContent>
-                <Ionicons
-                  name="lock-closed-outline"
+            <View className="w-full flex-row items-center">
+              <TextField.Input
+                placeholder="Enter password"
+                placeholderTextColor="rgb(107, 114, 128, 0.5)"
+                secureTextEntry={!isVisible}
+                className="flex-1 px-10 rounded-sm"
+                value={password}
+                onChangeText={setPassword}
+                editable={!loginMutation.isPending}
+              />
+              <StyledIonicons
+                name="lock-closed-outline"
+                size={16}
+                className="absolute left-3.5 text-muted-foreground"
+                pointerEvents="none"
+              />
+              <Pressable
+                onPress={() => setIsVisible(!isVisible)}
+                hitSlop={10}
+                className="absolute right-4"
+              >
+                <StyledIonicons
+                  name={isVisible ? "eye-off-outline" : "eye-outline"}
                   size={16}
                   className="text-muted-foreground"
                 />
-              </TextField.InputStartContent>
-              <TextField.InputEndContent>
-                <Ionicons
-                  name="eye-outline"
-                  size={16}
-                  className="text-muted-foreground"
-                />
-              </TextField.InputEndContent>
-            </TextField.Input>
+              </Pressable>
+            </View>
           </TextField>
 
           <Button
             pressableFeedbackVariant="ripple"
-            className="mt-4 rounded-sm w-full bg-primary"
+            className="mt-4 rounded-sm w-full"
+            variant="primary"
             onPress={handleLogin}
             isDisabled={loginMutation.isPending}
           >
-            <Button.Label className="text-primary-foreground">
-              Sign In
-            </Button.Label>
+            {loginMutation.isPending ? (
+              <Spinner color="white" size="sm" />
+            ) : (
+              <Button.Label>Sign In</Button.Label>
+            )}
           </Button>
         </View>
       </View>

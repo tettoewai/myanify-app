@@ -1,61 +1,37 @@
-import { Audio, AVPlaybackStatus } from 'expo-av';
-import { useEffect, useState } from 'react';
+import {
+  useAudioPlayerStatus,
+  useAudioPlayer as useExpoAudioPlayer,
+} from "expo-audio";
+import { useState } from "react";
 
 export const useAudioPlayer = () => {
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [status, setStatus] = useState<AVPlaybackStatus | null>(null);
+  const [source, setSource] = useState<string | null>(null);
+  const player = useExpoAudioPlayer(source);
+  const status = useAudioPlayerStatus(player);
 
   async function loadSound(uri: string) {
-    if (sound) {
-      await sound.unloadAsync();
-    }
-
-    const { sound: newSound } = await Audio.Sound.createAsync(
-      { uri },
-      { shouldPlay: true },
-      onPlaybackStatusUpdate
-    );
-    setSound(newSound);
-    setIsPlaying(true);
+    setSource(uri);
+    player.play();
   }
 
-  const onPlaybackStatusUpdate = (newStatus: AVPlaybackStatus) => {
-    setStatus(newStatus);
-    if (newStatus.isLoaded) {
-      setIsPlaying(newStatus.isPlaying);
-    }
-  };
-
-  async function playPause() {
-    if (!sound) return;
-
-    if (isPlaying) {
-      await sound.pauseAsync();
+  function playPause() {
+    if (player.playing) {
+      player.pause();
     } else {
-      await sound.playAsync();
+      player.play();
     }
   }
 
-  async function stop() {
-    if (!sound) return;
-    await sound.stopAsync();
-    setIsPlaying(false);
+  function stop() {
+    player.pause();
+    player.seekTo(0);
   }
-
-  useEffect(() => {
-    return sound
-      ? () => {
-          sound.unloadAsync();
-        }
-      : undefined;
-  }, [sound]);
 
   return {
     loadSound,
     playPause,
     stop,
-    isPlaying,
+    isPlaying: status.playing,
     status,
   };
 };

@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Uniwind } from "uniwind";
 import { AuthProvider } from "@/context/AuthContext";
+import { PlayerProvider } from "@/context/PlayerContext";
 
 const config: HeroUINativeConfig = {
   // Full type safety and autocomplete
@@ -38,11 +39,15 @@ export default function Provider({ children }: { children: ReactNode }) {
     <SafeAreaProvider>
       <GestureHandlerRootView className="flex-1">
         <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <HeroUINativeProvider config={config}>
-              <View className="flex-1 bg-background">{children}</View>
-            </HeroUINativeProvider>
-          </AuthProvider>
+          <HeroUINativeProvider config={config}>
+            <AuthProvider>
+              <PlayerProvider>
+                <View className="flex-1 bg-background">
+                  {children}
+                </View>
+              </PlayerProvider>
+            </AuthProvider>
+          </HeroUINativeProvider>
         </QueryClientProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>

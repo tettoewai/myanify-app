@@ -1,59 +1,69 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useUniwind } from "uniwind";
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+  const { theme } = useUniwind();
+  const isDark = theme === "dark";
+  const TAB_BAR_HEIGHT = 60 + insets.bottom;
+
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: "#ff0000",
-        tabBarInactiveTintColor: "#a3a3a3",
-        tabBarStyle: {
-          backgroundColor: "#0a0a0a",
-          borderTopWidth: 0,
-          elevation: 0,
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 8,
-        },
-        headerShown: false,
-      }}
-    >
-      <Tabs.Screen
-        name="home"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
-          ),
+    <View className="flex-1">
+      <Tabs
+        screenOptions={{
+          tabBarActiveTintColor: "#ff0000",
+          tabBarInactiveTintColor: isDark ? "#a3a3a3" : "#737373",
+          tabBarStyle: {
+            backgroundColor: isDark ? "#0a0a0a" : "#ffffff",
+            borderTopWidth: 0,
+            elevation: 0,
+            height: TAB_BAR_HEIGHT,
+            paddingBottom: 8 + insets.bottom,
+            paddingTop: 8,
+          },
+          headerShown: false,
         }}
-      />
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: "Search",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="search" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="library"
-        options={{
-          title: "Library",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="library" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="setting"
-        options={{
-          title: "Setting",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings" size={size} color={color} />
-          ),
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="home"
+          options={{
+            title: "Home",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="home" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="search"
+          options={{
+            title: "Search",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="search" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="library"
+          options={{
+            title: "Library",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="library" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="setting"
+          options={{
+            title: "Setting",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="settings" size={size} color={color} />
+            ),
+          }}
+        />
+      </Tabs>
+    </View>
   );
 }

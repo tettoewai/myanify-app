@@ -1,0 +1,75 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { apiClient } from "@/lib/api";
+import { Ionicons } from "@expo/vector-icons";
+import { useToast } from "heroui-native";
+import { Artist } from "@/lib/types";
+
+export const useLikeArtist = () => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: likedArtists, isLoading } = useQuery({
+    queryKey: ["liked-artists"],
+    queryFn: () => apiClient.get("/liked-artists"),
+  });
+
+  const likeArtist = useMutation({
+    mutationFn: (artistId: string) => {
+      return apiClient.post("/liked-artists", {
+        artistId,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["liked-artists"] });
+      toast.show({
+        variant: "success",
+        label: "Artist Liked",
+        icon: <Ionicons name="heart" size={24} color="white" />,
+      });
+    },
+    onError: (error) => {
+      console.log("Error liking artist", error);
+      toast.show({
+        label: "Error liking artist",
+        variant: "danger",
+        icon: <Ionicons name="close-circle" size={24} color="white" />,
+      });
+    },
+  });
+
+  const isLikedArtist = (artistId: string) => {
+    return likedArtists?.data?.some((artist: Artist) => artist.id === artistId);
+  };
+
+  const unlikeArtist = useMutation({
+    mutationFn: (artistId: string) => {
+      return apiClient.delete("/liked-artists?artistId=" + artistId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["liked-artists"] });
+      toast.show({
+        variant: "success",
+        label: "Artist Unliked",
+        icon: <Ionicons name="heart" size={24} color="white" />,
+      });
+    },
+    onError: () => {
+      toast.show({
+        label: "Error unliking artist",
+        variant: "danger",
+        icon: <Ionicons name="close-circle" size={24} color="white" />,
+      });
+    },
+  });
+
+  return {
+    likedArtists,
+    likeArtist,
+    isLikedArtist,
+    unlikeArtist,
+    isLoading,
+    isLiking: likeArtist.isPending,
+    isUnliking: unlikeArtist.isPending,
+  };
+};
