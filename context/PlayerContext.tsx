@@ -72,6 +72,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   );
   const restorePositionRef = useRef<number | null>(null);
 
+  const hasRestoredRef = useRef(false);
+
   // Configure audio mode
   useEffect(() => {
     setAudioModeAsync({
@@ -83,6 +85,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // Restore last played song on mount (only song ID, not full object)
   useEffect(() => {
     const restoreLastPlayed = async () => {
+      // Don't restore if already playing or already restored
+      if (currentSong || hasRestoredRef.current) return;
+      hasRestoredRef.current = true;
+
       try {
         const lastPlayedSongId = await SecureStore.getItemAsync(
           LAST_PLAYED_SONG_KEY
@@ -95,6 +101,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           // Find the song in the queue by ID
           const lastPlayed = queue.find((s) => s.id === lastPlayedSongId);
           if (lastPlayed) {
+            console.log("Restoring last played song");
             setCurrentSong(lastPlayed);
 
             if (lastPositionData) {
@@ -114,10 +121,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     };
 
     // Only restore if queue is loaded
-    if (queue.length > 0) {
+    if (queue.length > 0 && !currentSong && !hasRestoredRef.current) {
       restoreLastPlayed();
     }
-  }, [queue]);
+  }, [queue, currentSong]);
 
   // Save playback position periodically
   useEffect(() => {
@@ -193,6 +200,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [status]);
 
   const handleSongEnd = () => {
+    // Clear saved position for finished song
+    if (currentSong) {
+      savePlaybackPosition(currentSong.id, 0);
+    }
+
     if (repeatMode === "one") {
       // Song will loop automatically
       return;
@@ -268,6 +280,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     // If switching to a different song, reset position
     if (currentSong?.id !== song.id) {
+      console.log("Switching to new song, resetting position");
       restorePositionRef.current = null;
       setCurrentTime(0);
     }

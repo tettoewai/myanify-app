@@ -2,6 +2,7 @@ import {
   StyledImage as Image,
   StyledSafeAreaView as SafeAreaView,
 } from "@/components/styled";
+import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { useLibrary } from "@/hooks/useLibrary";
@@ -53,6 +54,7 @@ export default function PlaylistDetails() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { token } = useAuth();
   const {
     playSong,
     setQueue,
@@ -76,7 +78,7 @@ export default function PlaylistDetails() {
   } = useQuery({
     queryKey: ["playlist", id],
     queryFn: () => apiClient.get(`/playlists/${id}`),
-    enabled: !!id,
+    enabled: !!id && !!token,
   });
 
   // Transform songs to match our Song type

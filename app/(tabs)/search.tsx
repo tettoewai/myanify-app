@@ -2,6 +2,7 @@ import {
   StyledImage as Image,
   StyledSafeAreaView as SafeAreaView,
 } from "@/components/styled";
+import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { apiClient } from "@/lib/api";
@@ -31,6 +32,7 @@ const COLUMN_WIDTH = (width - 48) / 2;
 export default function Search() {
   const { playSong, setQueue } = usePlayer();
   const { isLikedSong, toggleLike } = useLikeSong();
+  const { token } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const router = useRouter();
@@ -46,20 +48,20 @@ export default function Search() {
   const { data: genresData, isLoading: genresLoading } = useQuery({
     queryKey: ["genres"],
     queryFn: () => apiClient.get("/genres"),
-    enabled: !debouncedQuery,
+    enabled: !debouncedQuery && !!token,
   });
 
   const { data: songsData, isLoading: songsLoading } = useQuery({
     queryKey: ["songs", "search", debouncedQuery],
     queryFn: () =>
       apiClient.get(`/songs?search=${debouncedQuery}&isPublished=true`),
-    enabled: !!debouncedQuery,
+    enabled: !!debouncedQuery && !!token,
   });
 
   const { data: artistsData, isLoading: artistsLoading } = useQuery({
     queryKey: ["artists", "search", debouncedQuery],
     queryFn: () => apiClient.get(`/artists?search=${debouncedQuery}`),
-    enabled: !!debouncedQuery,
+    enabled: !!debouncedQuery && !!token,
   });
 
   const genres: Genre[] = genresData?.data || [];

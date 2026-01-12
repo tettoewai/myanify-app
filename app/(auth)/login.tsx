@@ -3,12 +3,13 @@ import { apiClient } from "@/lib/api";
 import { authStorage } from "@/lib/auth-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation } from "@tanstack/react-query";
-import { makeRedirectUri, useAuthRequest } from "expo-auth-session";
+import * as Google from "expo-auth-session/providers/google";
+import * as AuthSession from "expo-auth-session";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import { Button, Spinner, TextField, useToast } from "heroui-native";
 import { useEffect, useState } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { withUniwind } from "uniwind";
 
 const StyledIonicons = withUniwind(Ionicons);
@@ -17,10 +18,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 const ANDROID_CLIENT_ID = Constants.expoConfig?.extra?.google?.androidClientId;
 const IOS_CLIENT_ID = Constants.expoConfig?.extra?.google?.iosClientId;
-
-const redirectUri = makeRedirectUri({
-  native: "myanify://oauthredirect", // Replace 'myanify' with your app's scheme
-});
+const WEB_CLIENT_ID = Constants.expoConfig?.extra?.google?.webClientId;
 
 export default function Login() {
   const { signIn } = useAuth();
@@ -103,22 +101,11 @@ export default function Login() {
     },
   });
 
-  const [request, response, promptAsync] = useAuthRequest(
-    {
-      clientId: Platform.select({
-        ios: IOS_CLIENT_ID,
-        android: ANDROID_CLIENT_ID,
-        web: ANDROID_CLIENT_ID, // Use Android client ID for web as well
-      }),
-      redirectUri,
-      scopes: ["profile", "email"],
-    },
-    {
-      authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
-      tokenEndpoint: "https://oauth2.googleapis.com/token",
-      revocationEndpoint: "https://oauth2.googleapis.com/revoke",
-    }
-  );
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: ANDROID_CLIENT_ID,
+    iosClientId: IOS_CLIENT_ID,
+    webClientId: WEB_CLIENT_ID,
+  });
 
   useEffect(() => {
     if (response?.type === "success") {

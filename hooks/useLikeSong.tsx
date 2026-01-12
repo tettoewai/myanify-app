@@ -3,14 +3,17 @@ import { apiClient } from "@/lib/api";
 import { Ionicons } from "@expo/vector-icons";
 import { useToast } from "heroui-native";
 import { Song } from "@/lib/types";
+import { useAuth } from "@/context/AuthContext";
 
 export const useLikeSong = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { token } = useAuth();
 
   const { data: likedSongsResponse, isLoading } = useQuery({
     queryKey: ["liked-songs"],
     queryFn: () => apiClient.get("/liked-songs"),
+    enabled: !!token,
   });
 
   const likedSongs: Song[] = likedSongsResponse?.data || [];

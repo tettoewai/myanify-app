@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1048591175790",
+    "project_id": "myanify-98ced",
+    "storage_bucket": "myanify-98ced.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1048591175790:android:75dabe77114e09e84f567f",
+        "android_client_info": {
+          "package_name": "com.tlab.myanify"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBMHfAgCKdwfNElWJ5-e9wjE8U22GtLjgs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

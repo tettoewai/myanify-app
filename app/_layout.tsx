@@ -2,6 +2,7 @@ import Provider from "@/components/Providers";
 import { MiniPlayer } from "@/components/player/MiniPlayer";
 import { Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import "../global.css";
 
 export default function RootLayout() {
   const segments = useSegments();

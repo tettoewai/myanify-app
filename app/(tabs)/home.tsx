@@ -2,6 +2,7 @@ import {
   StyledImage as Image,
   StyledSafeAreaView as SafeAreaView,
 } from "@/components/styled";
+import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { apiClient } from "@/lib/api";
@@ -26,6 +27,7 @@ export default function Home() {
   const router = useRouter();
   const { playSong, setQueue, currentSong } = usePlayer();
   const { isLikedSong, toggleLike } = useLikeSong();
+  const { token } = useAuth();
 
   const {
     data: songsData,
@@ -35,6 +37,7 @@ export default function Home() {
   } = useQuery({
     queryKey: ["songs", "recent"],
     queryFn: () => apiClient.get("/songs?limit=10&isPublished=true"),
+    enabled: !!token,
   });
 
   const {
@@ -45,6 +48,7 @@ export default function Home() {
   } = useQuery({
     queryKey: ["artists", "top"],
     queryFn: () => apiClient.get("/artists?limit=10"),
+    enabled: !!token,
   });
 
   const {
@@ -55,6 +59,7 @@ export default function Home() {
   } = useQuery({
     queryKey: ["albums", "new"],
     queryFn: () => apiClient.get("/albums?limit=10"),
+    enabled: !!token,
   });
 
   const isLoading = songsLoading || artistsLoading || albumsLoading;

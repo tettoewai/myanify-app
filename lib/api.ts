@@ -1,6 +1,11 @@
+import Constants from "expo-constants";
 import { authStorage } from "./auth-storage";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "");
+// Try to get API_URL from environment variable first (for development),
+// then fall back to app.json config (for builds)
+const API_URL = (
+  process.env.EXPO_PUBLIC_API_URL || Constants.expoConfig?.extra?.apiUrl
+)?.replace(/\/$/, "");
 
 export const apiClient = {
   async fetch(endpoint: string, options: RequestInit = {}) {

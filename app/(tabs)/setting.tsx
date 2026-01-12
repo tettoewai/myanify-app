@@ -5,11 +5,10 @@ import { apiClient } from "@/lib/api";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
-import { Button, Card } from "heroui-native";
+import { Button, Card, Dialog, useToast } from "heroui-native";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   Switch,
   Text,
@@ -35,11 +34,44 @@ export default function Setting() {
   const { theme } = useUniwind();
   const queryClient = useQueryClient();
   const { currentSong } = usePlayer();
+  const { toast } = useToast();
 
   // Local state for form fields
   const [name, setName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [isEditing, setIsEditing] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    confirmText?: string;
+    cancelText?: string;
+    onConfirm?: () => void;
+    isDestructive?: boolean;
+  }>({
+    isOpen: false,
+    title: "",
+    description: "",
+  });
+
+  const showDialog = (
+    title: string,
+    description: string,
+    onConfirm?: () => void,
+    confirmText = "OK",
+    cancelText?: string,
+    isDestructive = false
+  ) => {
+    setDialogConfig({
+      isOpen: true,
+      title,
+      description,
+      onConfirm,
+      confirmText,
+      cancelText,
+      isDestructive,
+    });
+  };
 
   // Fetch user profile
   const {
@@ -68,11 +100,17 @@ export default function Setting() {
       queryClient.setQueryData(["user", "profile"], data);
       setIsEditing(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Success", "Profile updated successfully");
+      toast.show({
+        label: "Profile updated successfully",
+        variant: "success",
+      });
     },
     onError: (error: any) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", error.message || "Failed to update profile");
+      toast.show({
+        label: error.message || "Failed to update profile",
+        variant: "danger",
+      });
     },
   });
 
@@ -81,24 +119,16 @@ export default function Setting() {
   };
 
   const handleSignOut = () => {
-    Alert.alert(
+    showDialog(
       "Sign Out",
       "Are you sure you want to sign out?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Sign Out",
-          style: "destructive",
-          onPress: () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            signOut();
-          },
-        },
-      ],
-      { cancelable: true }
+      () => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        signOut();
+      },
+      "Sign Out",
+      "Cancel",
+      true
     );
   };
 
@@ -217,15 +247,6 @@ export default function Setting() {
 
                 <View className="flex-row gap-2 mt-2">
                   <Button
-                    onPress={handleSaveProfile}
-                    isDisabled={updateProfileMutation.isPending}
-                    className="flex-1"
-                  >
-                    <Button.Label>
-                      {updateProfileMutation.isPending ? "Saving..." : "Save"}
-                    </Button.Label>
-                  </Button>
-                  <Button
                     onPress={() => {
                       setIsEditing(false);
                       setName(profile.name || "");
@@ -236,6 +257,15 @@ export default function Setting() {
                     variant="ghost"
                   >
                     <Button.Label>Cancel</Button.Label>
+                  </Button>
+                  <Button
+                    onPress={handleSaveProfile}
+                    isDisabled={updateProfileMutation.isPending}
+                    className="flex-1"
+                  >
+                    <Button.Label>
+                      {updateProfileMutation.isPending ? "Saving..." : "Save"}
+                    </Button.Label>
                   </Button>
                 </View>
               </View>
@@ -330,7 +360,7 @@ export default function Setting() {
               <TouchableOpacity
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  Alert.alert(
+                  showDialog(
                     "Premium",
                     "Upgrade to Premium for ad-free listening and more features!"
                   );
@@ -356,7 +386,7 @@ export default function Setting() {
               <TouchableOpacity
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  Alert.alert(
+                  showDialog(
                     "Change Password",
                     "Please use the web app to change your password."
                   );
@@ -381,7 +411,7 @@ export default function Setting() {
             <TouchableOpacity
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                Alert.alert(
+                showDialog(
                   "Privacy Settings",
                   "Manage your privacy preferences here."
                 );
@@ -412,7 +442,7 @@ export default function Setting() {
             <TouchableOpacity
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                Alert.alert(
+                showDialog(
                   "Help & Support",
                   "Contact us at support@myanify.com"
                 );
@@ -436,7 +466,7 @@ export default function Setting() {
             <TouchableOpacity
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                Alert.alert(
+                showDialog(
                   "Terms & Privacy",
                   "Read our terms of service and privacy policy."
                 );
@@ -491,6 +521,44 @@ export default function Setting() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Generic Dialog */}
+      <Dialog
+        isOpen={dialogConfig.isOpen}
+        onOpenChange={(isOpen) => setDialogConfig({ ...dialogConfig, isOpen })}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay />
+          <Dialog.Content>
+            <Dialog.Close />
+            <View className="mb-5 gap-1.5">
+              <Dialog.Title>{dialogConfig.title}</Dialog.Title>
+              <Dialog.Description>
+                {dialogConfig.description}
+              </Dialog.Description>
+            </View>
+            <View className="flex-row justify-end gap-3">
+              {dialogConfig.cancelText && (
+                <Dialog.Close asChild>
+                  <Button variant="ghost" size="sm">
+                    <Button.Label>{dialogConfig.cancelText}</Button.Label>
+                  </Button>
+                </Dialog.Close>
+              )}
+              <Button
+                size="sm"
+                className={dialogConfig.isDestructive ? "bg-destructive" : ""}
+                onPress={() => {
+                  dialogConfig.onConfirm?.();
+                  setDialogConfig({ ...dialogConfig, isOpen: false });
+                }}
+              >
+                <Button.Label>{dialogConfig.confirmText || "OK"}</Button.Label>
+              </Button>
+            </View>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog>
     </SafeAreaView>
   );
 }

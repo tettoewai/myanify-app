@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "myanify-app",
+    "name": "myanify",
     "slug": "myanify-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,7 +9,8 @@
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tlab.myanify"
     },
     "android": {
       "adaptiveIcon": {
@@ -20,11 +21,12 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.tlab.myanify"
+      "package": "com.tlab.myanify",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",
@@ -53,8 +55,10 @@
       },
       "google": {
         "androidClientId": "739457800060-e53a1s0m3576udu1o5id670plh18aab7.apps.googleusercontent.com",
-        "iosClientId": "739457800060-s319n61if27pmd7lhffoqhatpi2k7asb.apps.googleusercontent.com"
-      }
+        "iosClientId": "739457800060-s319n61if27pmd7lhffoqhatpi2k7asb.apps.googleusercontent.com",
+        "webClientId": "739457800060-eq2ieghufl3vmdr96se7tofi9h67gr6i.apps.googleusercontent.com"
+      },
+      "apiUrl": "https://myanify.vercel.app/api"
     }
   }
 }

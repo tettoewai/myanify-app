@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
 import { Artist, Playlist, Song } from "@/lib/types";
+import { useAuth } from "@/context/AuthContext";
 
 export const useLibrary = () => {
   const queryClient = useQueryClient();
+  const { token } = useAuth();
 
   const {
     data: likedSongsData,
@@ -15,6 +17,7 @@ export const useLibrary = () => {
       const response = await apiClient.get("/liked-songs");
       return response.data as any[];
     },
+    enabled: !!token,
   });
 
   const {
@@ -27,6 +30,7 @@ export const useLibrary = () => {
       const response = await apiClient.get("/liked-artists");
       return response.data as Artist[];
     },
+    enabled: !!token,
   });
 
   const {
@@ -39,6 +43,7 @@ export const useLibrary = () => {
       const response = await apiClient.get("/playlists");
       return response.data as Playlist[];
     },
+    enabled: !!token,
   });
 
   const createPlaylistMutation = useMutation({
@@ -130,8 +135,10 @@ export const useLibrary = () => {
     isLoading: isLoadingSongs || isLoadingArtists || isLoadingPlaylists,
     createPlaylist: createPlaylistMutation.mutateAsync,
     isCreatingPlaylist: createPlaylistMutation.isPending,
-    updatePlaylist: (id: string, data: { name?: string; description?: string }) =>
-      updatePlaylistMutation.mutateAsync({ id, data }),
+    updatePlaylist: (
+      id: string,
+      data: { name?: string; description?: string }
+    ) => updatePlaylistMutation.mutateAsync({ id, data }),
     isUpdatingPlaylist: updatePlaylistMutation.isPending,
     deletePlaylist: deletePlaylistMutation.mutateAsync,
     isDeletingPlaylist: deletePlaylistMutation.isPending,

@@ -4,14 +4,17 @@ import { apiClient } from "@/lib/api";
 import { Ionicons } from "@expo/vector-icons";
 import { useToast } from "heroui-native";
 import { Artist } from "@/lib/types";
+import { useAuth } from "@/context/AuthContext";
 
 export const useLikeArtist = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { token } = useAuth();
 
   const { data: likedArtists, isLoading } = useQuery({
     queryKey: ["liked-artists"],
     queryFn: () => apiClient.get("/liked-artists"),
+    enabled: !!token,
   });
 
   const likeArtist = useMutation({

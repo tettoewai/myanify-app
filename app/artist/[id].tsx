@@ -2,6 +2,7 @@ import {
   StyledImage as Image,
   StyledSafeAreaView as SafeAreaView,
 } from "@/components/styled";
+import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
 import { useLikeArtist } from "@/hooks/useLikeArtist";
 import { useLikeSong } from "@/hooks/useLikeSong";
@@ -48,6 +49,7 @@ const StatCard = ({
 export default function ArtistDetails() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { token } = useAuth();
   const {
     likeArtist,
     unlikeArtist,
@@ -71,7 +73,7 @@ export default function ArtistDetails() {
   const { data: artist, isLoading: artistLoading } = useQuery({
     queryKey: ["artist", id],
     queryFn: () => apiClient.get(`/artists/${id}`),
-    enabled: !!id,
+    enabled: !!id && !!token,
   });
 
   // Transform songs to match our Song type
@@ -324,7 +326,7 @@ export default function ArtistDetails() {
         <View className="px-6 py-4">
           <View className="flex-row items-center mb-3">
             <Text
-              className="text-white text-5xl font-black flex-1"
+              className="text-white text-5xl font-black flex-1 py-1 leading-tight"
               numberOfLines={2}
             >
               {artist.name}

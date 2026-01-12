@@ -1,3 +1,4 @@
+import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,6 +17,7 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
   const insets = useSafeAreaInsets();
   const { theme } = useUniwind();
   const isDark = theme === "dark";
+  const { token } = useAuth();
   const {
     currentSong,
     isPlaying,
@@ -27,9 +29,14 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
 
   const { isLikedSong, toggleLike } = useLikeSong();
 
-  // Hide mini player when on player page
+  // Hide mini player when on player page or if no session
   const isOnPlayerPage = (segments as string[]).includes("player");
-  if (!currentSong || isOnPlayerPage) return null;
+  const isAuthPage = (segments as string[]).includes("(auth)");
+  const isLandingPage =
+    segments.length === 0 || (segments.length === 1 && segments[0] === "index");
+
+  if (!token || !currentSong || isOnPlayerPage || isAuthPage || isLandingPage)
+    return null;
 
   const progress = duration > 0 ? currentTime / duration : 0;
   const TAB_BAR_HEIGHT = 60 + insets.bottom;

@@ -4,13 +4,19 @@ import { Text, View, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import "../global.css";
 
 export default function Index() {
   const { token, isLoading } = useAuth();
   const insets = useSafeAreaInsets();
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <View className="flex-1 bg-background items-center justify-center">
+        <Ionicons name="musical-notes" size={48} color="#ff0000" />
+        <Text className="text-foreground mt-4">Loading...</Text>
+      </View>
+    );
+  }
 
   if (token) {
     return <Redirect href="/(tabs)/home" />;
