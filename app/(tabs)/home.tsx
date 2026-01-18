@@ -113,10 +113,10 @@ export default function Home() {
       song.artists?.map((a: any) => a.artist?.name || a.name).join(", ") || "",
     album: song.album
       ? {
-          id: song.album.id,
-          name: song.album.name,
-          coverUrl: song.album.coverUrl || "",
-        }
+        id: song.album.id,
+        name: song.album.name,
+        coverUrl: song.album.coverUrl || "",
+      }
       : undefined,
     duration: song.duration || 0,
     audioUrl: song.audioUrl || "",
@@ -132,6 +132,7 @@ export default function Home() {
       setQueue(songs);
     }
     playSong(song);
+    router.push("/player");
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 

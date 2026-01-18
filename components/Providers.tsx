@@ -1,18 +1,25 @@
 import { HeroUINativeConfig, HeroUINativeProvider } from "heroui-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Uniwind } from "uniwind";
 import { AuthProvider } from "@/context/AuthContext";
 import { PlayerProvider } from "@/context/PlayerContext";
+import * as SplashScreen from "expo-splash-screen";
+
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
 
 const config: HeroUINativeConfig = {
   // Full type safety and autocomplete
   textProps: {
     allowFontScaling: true,
     maxFontSizeMultiplier: 1.5,
+  },
+  devInfo: {
+    stylingPrinciples: false
   },
   toast: {
     defaultProps: {
@@ -30,10 +37,35 @@ const config: HeroUINativeConfig = {
 
 export default function Provider({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
+  const [appIsReady, setAppIsReady] = useState(false);
 
   useEffect(() => {
-    Uniwind.setTheme("dark");
+    async function prepare() {
+      try {
+        // Set theme
+        Uniwind.setTheme("dark");
+        // Add any other initialization here if needed
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        // Tell the application to render
+        setAppIsReady(true);
+      }
+    }
+
+    prepare();
   }, []);
+
+  const onLayoutRootView = useCallback(async () => {
+    if (appIsReady) {
+      // Hide the splash screen once the app is ready
+      await SplashScreen.hideAsync();
+    }
+  }, [appIsReady]);
+
+  if (!appIsReady) {
+    return null;
+  }
 
   return (
     <SafeAreaProvider>
@@ -42,7 +74,7 @@ export default function Provider({ children }: { children: ReactNode }) {
           <HeroUINativeProvider config={config}>
             <AuthProvider>
               <PlayerProvider>
-                <View className="flex-1 bg-background">
+                <View className="flex-1 bg-background" onLayout={onLayoutRootView}>
                   {children}
                 </View>
               </PlayerProvider>

@@ -60,7 +60,7 @@ export const apiClient = {
 
         throw new Error(
           errorData.message ||
-            `API request failed with status ${response.status}: ${response.statusText}`
+          `API request failed with status ${response.status}: ${response.statusText}`
         );
       }
 
@@ -80,11 +80,14 @@ export const apiClient = {
         networkError.message?.includes("Unauthorized");
 
       if (!isAuthError) {
+        const fullUrl = `${API_URL}${cleanEndpoint}`;
         console.error("Network Fetch Error Details:", {
           message: networkError.message,
           helpfulMessage: helpfulMessage,
           stack: networkError.stack,
           originalError: networkError.message,
+          url: fullUrl,
+          apiUrl: API_URL,
         });
         const enhancedError = new Error(helpfulMessage);
         (enhancedError as any).originalError = networkError;

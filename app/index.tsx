@@ -9,17 +9,14 @@ export default function Index() {
   const { token, isLoading } = useAuth();
   const insets = useSafeAreaInsets();
 
-  if (isLoading) {
-    return (
-      <View className="flex-1 bg-background items-center justify-center">
-        <Ionicons name="musical-notes" size={48} color="#ff0000" />
-        <Text className="text-foreground mt-4">Loading...</Text>
-      </View>
-    );
-  }
-
+  // Redirect immediately without showing loading screen
   if (token) {
     return <Redirect href="/(tabs)/home" />;
+  }
+
+  // Don't show anything while loading, let splash screen handle it
+  if (isLoading) {
+    return null;
   }
 
   const features = [

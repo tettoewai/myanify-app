@@ -2,19 +2,18 @@ import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
 import { authStorage } from "@/lib/auth-storage";
 import { Ionicons } from "@expo/vector-icons";
+import {
+  GoogleSignin,
+  statusCodes,
+} from "@react-native-google-signin/google-signin";
 import { useMutation } from "@tanstack/react-query";
-import * as Google from "expo-auth-session/providers/google";
-import * as AuthSession from "expo-auth-session";
 import Constants from "expo-constants";
-import * as WebBrowser from "expo-web-browser";
 import { Button, Spinner, TextField, useToast } from "heroui-native";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { withUniwind } from "uniwind";
 
 const StyledIonicons = withUniwind(Ionicons);
-
-WebBrowser.maybeCompleteAuthSession();
 
 const ANDROID_CLIENT_ID = Constants.expoConfig?.extra?.google?.androidClientId;
 const IOS_CLIENT_ID = Constants.expoConfig?.extra?.google?.iosClientId;
@@ -26,6 +25,19 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (!WEB_CLIENT_ID) {
+      console.warn(
+        "Google Sign-In: WEB_CLIENT_ID is not defined in expoConfig.extra.google"
+      );
+    }
+    GoogleSignin.configure({
+      webClientId: WEB_CLIENT_ID,
+      iosClientId: IOS_CLIENT_ID,
+      offlineAccess: true,
+    });
+  }, []);
 
   const loginMutation = useMutation({
     mutationFn: async () => {
@@ -73,9 +85,9 @@ export default function Login() {
   });
 
   const googleLoginMutation = useMutation({
-    mutationFn: async (googleAccessToken: string) => {
+    mutationFn: async (idToken: string) => {
       const response = await apiClient.post("/auth/google-login", {
-        googleAccessToken,
+        idToken,
       });
       if (!response.token) {
         throw new Error("Invalid response from server");
@@ -101,23 +113,52 @@ export default function Login() {
     },
   });
 
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    androidClientId: ANDROID_CLIENT_ID,
-    iosClientId: IOS_CLIENT_ID,
-    webClientId: WEB_CLIENT_ID,
-  });
+  const handleGoogleLogin = async () => {
+    try {
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      const idToken = userInfo.data?.idToken;
 
-  useEffect(() => {
-    if (response?.type === "success") {
-      const { authentication } = response;
-      if (authentication?.accessToken) {
-        googleLoginMutation.mutate(authentication.accessToken);
+      if (idToken) {
+        googleLoginMutation.mutate(idToken);
+      } else {
+        throw new Error("No ID token received from Google");
+      }
+    } catch (error: any) {
+      console.error("Google Login Error Details:", {
+        code: error.code,
+        message: error.message,
+        nativeStackAndroid: error.nativeStackAndroid,
+        webClientId: WEB_CLIENT_ID ? "✅ Set" : "❌ Missing",
+        troubleshooting: "https://react-native-google-signin.github.io/docs/troubleshooting",
+      });
+
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        // user cancelled the login flow
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        // operation (e.g. sign in) is in progress already
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        toast.show({
+          variant: "danger",
+          label: "Google Play Services",
+          description: "Google Play Services not available or outdated",
+        });
+      } else if (error.code === "10" || error.code === 10) {
+        // DEVELOPER_ERROR (code 10) - not exported in statusCodes but error code is "10"
+        toast.show({
+          variant: "danger",
+          label: "Google Sign-In Configuration Error",
+          description:
+            "SHA-1 fingerprint not registered. Add your app's SHA-1 to Google Cloud Console → OAuth Client ID → SHA certificate fingerprints.",
+        });
+      } else {
+        toast.show({
+          variant: "danger",
+          label: "Google Login Error",
+          description: error.message || "An unknown error occurred",
+        });
       }
     }
-  }, [response]);
-
-  const handleGoogleLogin = () => {
-    promptAsync();
   };
 
   const isInvalidEmail =
@@ -154,7 +195,7 @@ export default function Login() {
             className="w-full rounded-sm"
             size="sm"
             onPress={handleGoogleLogin}
-            isDisabled={!request || googleLoginMutation.isPending}
+            isDisabled={googleLoginMutation.isPending}
           >
             {googleLoginMutation.isPending ? (
               <Spinner color="white" size="sm" />

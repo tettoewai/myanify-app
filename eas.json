@@ -14,6 +14,11 @@
         "EXPO_PUBLIC_API_URL": "https://myanify.vercel.app/api"
       }
     },
+    "internal": {
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "preview": {
       "distribution": "internal",
       "android": {
