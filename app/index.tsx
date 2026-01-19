@@ -67,12 +67,12 @@ export default function Index() {
           <View className="bg-primary/10 px-4 py-2 rounded-full border border-primary/20 mb-6 flex-row items-center">
             <Ionicons name="sparkles" size={16} color="#ff0000" />
             <Text className="text-primary text-xs font-bold ml-2 uppercase tracking-wider">
-              Myanmar's Premier Music Platform
+              Myanmar&apos;s Premier Music Platform
             </Text>
           </View>
 
           <Text className="text-4xl md:text-5xl font-bold text-center text-foreground leading-tight">
-            Discover Myanmar's{"\n"}
+            Discover Myanmar&apos;s{"\n"}
             <Text className="text-primary">Musical Heritage</Text>
           </Text>
 

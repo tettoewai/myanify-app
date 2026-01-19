@@ -304,7 +304,7 @@ export default function Search() {
           {artists.length === 0 && songs.length === 0 && (
             <View className="flex-1 justify-center items-center pt-[100px]">
               <Text className="text-muted-foreground text-base">
-                No results found for "{debouncedQuery}"
+                No results found for &quot;{debouncedQuery}&quot;
               </Text>
             </View>
           )}

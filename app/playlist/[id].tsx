@@ -30,7 +30,7 @@ import {
 import { withUniwind } from "uniwind";
 
 const StyledIonicons = withUniwind(Ionicons);
-const { height, width } = Dimensions.get("window");
+const { height } = Dimensions.get("window");
 const HEADER_HEIGHT = height * 0.45;
 
 // Stats Card Component

@@ -2,9 +2,8 @@ import {
   StyledImage as Image,
   StyledSafeAreaView as SafeAreaView,
 } from "@/components/styled";
-import { usePlayer } from "@/context/PlayerContext";
 import { useLibrary } from "@/hooks/useLibrary";
-import { Artist, Playlist, Song } from "@/lib/types";
+import { Artist, Playlist } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -45,8 +44,6 @@ export default function Library() {
     createPlaylist,
     isCreatingPlaylist,
   } = useLibrary();
-
-  const { playSong, setQueue } = usePlayer();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -92,12 +89,6 @@ export default function Library() {
         icon: <Ionicons name="close-circle" size={24} color="white" />,
       });
     }
-  };
-
-  const handlePlaySong = (song: Song, contextSongs: Song[]) => {
-    setQueue(contextSongs);
-    playSong(song);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const renderPlaylistItem = ({
@@ -507,11 +498,10 @@ export default function Library() {
               setActiveTab("playlists");
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }}
-            className={`flex-1 px-4 py-3 rounded-xl ${
-              activeTab === "playlists"
-                ? "bg-primary shadow"
-                : "bg-card border border-border"
-            }`}
+            className={`flex-1 px-4 py-3 rounded-xl ${activeTab === "playlists"
+              ? "bg-primary shadow"
+              : "bg-card border border-border"
+              }`}
           >
             <View className="flex-row items-center justify-center">
               <StyledIonicons
@@ -522,9 +512,8 @@ export default function Library() {
                 }
               />
               <Text
-                className={`font-semibold ml-2 ${
-                  activeTab === "playlists" ? "text-white" : "text-foreground"
-                }`}
+                className={`font-semibold ml-2 ${activeTab === "playlists" ? "text-white" : "text-foreground"
+                  }`}
               >
                 Playlists
               </Text>
@@ -535,11 +524,10 @@ export default function Library() {
               setActiveTab("artists");
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }}
-            className={`flex-1 px-4 py-3 rounded-xl ${
-              activeTab === "artists"
-                ? "bg-primary shadow"
-                : "bg-card border border-border"
-            }`}
+            className={`flex-1 px-4 py-3 rounded-xl ${activeTab === "artists"
+              ? "bg-primary shadow"
+              : "bg-card border border-border"
+              }`}
           >
             <View className="flex-row items-center justify-center">
               <StyledIonicons
@@ -550,9 +538,8 @@ export default function Library() {
                 }
               />
               <Text
-                className={`font-semibold ml-2 ${
-                  activeTab === "artists" ? "text-white" : "text-foreground"
-                }`}
+                className={`font-semibold ml-2 ${activeTab === "artists" ? "text-white" : "text-foreground"
+                  }`}
               >
                 Artists
               </Text>
@@ -634,11 +621,10 @@ export default function Library() {
                 <TouchableOpacity
                   onPress={handleCreatePlaylist}
                   disabled={isCreatingPlaylist || !newPlaylistName.trim()}
-                  className={`flex-1 px-6 py-4 rounded-xl shadow ${
-                    isCreatingPlaylist || !newPlaylistName.trim()
-                      ? "bg-muted-foreground/30"
-                      : "bg-primary"
-                  }`}
+                  className={`flex-1 px-6 py-4 rounded-xl shadow ${isCreatingPlaylist || !newPlaylistName.trim()
+                    ? "bg-muted-foreground/30"
+                    : "bg-primary"
+                    }`}
                 >
                   {isCreatingPlaylist ? (
                     <ActivityIndicator size="small" color="white" />

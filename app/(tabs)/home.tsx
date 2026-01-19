@@ -81,15 +81,6 @@ export default function Home() {
     return "Good Night";
   }, []);
 
-  // Get greeting icon
-  const greetingIcon = useMemo(() => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "sunny-outline";
-    if (hour < 17) return "sunny";
-    if (hour < 22) return "cloudy-outline";
-    return "moon-outline";
-  }, []);
-
   if (isLoading) {
     return (
       <View className="flex-1 justify-center items-center bg-background">

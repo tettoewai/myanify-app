@@ -64,13 +64,14 @@ interface LyricItemProps {
 
 const LyricItem = memo(({ lyric, isActive, fontSizeClass }: LyricItemProps) => (
   <Text
-    className={`${fontSizeClass} font-bold mb-6 ${
-      isActive ? "text-white" : "text-white/30"
-    }`}
+    className={`${fontSizeClass} font-bold mb-6 ${isActive ? "text-white" : "text-white/30"
+      }`}
   >
     {lyric.text}
   </Text>
 ));
+
+LyricItem.displayName = "LyricItem";
 
 interface LyricsListProps {
   lyrics: { text: string; time: number }[];
@@ -101,7 +102,7 @@ const LyricsList = memo(
         flatListRef.current.scrollToIndex({
           index: activeIndex,
           animated: true,
-          viewPosition: 0.3, // Scroll to 30% from the top
+          viewPosition: 0.3,
         });
       }
     }, [activeIndex, isUserScrolling]);
@@ -115,12 +116,11 @@ const LyricsList = memo(
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
       scrollTimeoutRef.current = setTimeout(() => {
         setIsUserScrolling(false);
-      }, 3000); // Resume auto-scroll after 3 seconds of inactivity
+      }, 3000);
     };
 
     return (
       <View className="flex-1 px-8">
-        {/* Header for Lyrics Mode */}
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={onClose}
@@ -169,6 +169,8 @@ const LyricsList = memo(
   }
 );
 
+LyricsList.displayName = "LyricsList";
+
 export function FullPlayer() {
   const router = useRouter();
   const {
@@ -178,16 +180,12 @@ export function FullPlayer() {
     duration,
     isShuffled,
     repeatMode,
-    volume,
-    isMuted,
     togglePlay,
     nextSong,
     prevSong,
     seekTo,
     setIsShuffled,
     setRepeatMode,
-    setVolume,
-    setIsMuted,
   } = usePlayer();
 
   const { isLikedSong, toggleLike } = useLikeSong();
@@ -196,7 +194,6 @@ export function FullPlayer() {
   const [lyricsFontSize, setLyricsFontSize] = useState<
     "small" | "medium" | "large"
   >("medium");
-  const [dragY, setDragY] = useState(0);
   const [isSliding, setIsSliding] = useState(false);
   const [slidingValue, setSlidingValue] = useState(0);
   const [localCurrentTime, setLocalCurrentTime] = useState(0);
@@ -254,7 +251,7 @@ export function FullPlayer() {
     } else {
       rotation.stopAnimation();
     }
-  }, [isPlaying]);
+  }, [isPlaying, rotation]);
 
   const rotateInterpolate = rotation.interpolate({
     inputRange: [0, 1],
@@ -270,7 +267,6 @@ export function FullPlayer() {
       },
       onPanResponderMove: (_, gestureState) => {
         if (gestureState.dy > 0) {
-          setDragY(gestureState.dy);
           panY.setValue(gestureState.dy);
           scale.setValue(1 - gestureState.dy / height);
         }
@@ -289,16 +285,14 @@ export function FullPlayer() {
             useNativeDriver: true,
           }).start();
         }
-        setDragY(0);
       },
     })
   ).current;
 
-  if (!currentSong) {
-    // Redirect back if no song is playing
-    router.back();
-    return null;
-  }
+  const lyrics = useMemo(
+    () => currentSong?.lyrics ?? [],
+    [currentSong?.lyrics]
+  );
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -307,8 +301,8 @@ export function FullPlayer() {
   };
 
   const getArtistName = () => {
-    if (currentSong.artist) return currentSong.artist;
-    if (currentSong.artists && currentSong.artists.length > 0) {
+    if (currentSong?.artist) return currentSong.artist;
+    if (currentSong?.artists && currentSong.artists.length > 0) {
       return currentSong.artists.map((a) => a.artist.name).join(", ");
     }
     return "Unknown Artist";
@@ -316,23 +310,23 @@ export function FullPlayer() {
 
   const getCoverUrl = () => {
     return (
-      currentSong.albumCoverUrl ||
-      currentSong.album?.coverUrl ||
-      currentSong.coverUrl
+      currentSong?.albumCoverUrl ||
+      currentSong?.album?.coverUrl ||
+      currentSong?.coverUrl ||
+      ""
     );
   };
 
   const activeIndex = useMemo(() => {
-    if (!currentSong.lyrics || currentSong.lyrics.length === 0) return -1;
-    // Add lead time to current time for better sync perception
+    if (!lyrics.length) return -1;
     const targetTime = Math.max(0, currentTime + SYNC_LEAD_SECONDS);
-    return findLyricIndexByTime(currentSong.lyrics, targetTime);
-  }, [currentSong.lyrics, currentTime]);
+    return findLyricIndexByTime(lyrics, targetTime);
+  }, [lyrics, currentTime]);
 
   const currentLyric = useMemo(() => {
-    if (!currentSong.lyrics || activeIndex === -1) return null;
-    return currentSong.lyrics[activeIndex];
-  }, [currentSong.lyrics, activeIndex]);
+    if (!lyrics.length || activeIndex === -1) return null;
+    return lyrics[activeIndex];
+  }, [lyrics, activeIndex]);
 
   const toggleRepeat = () => {
     const modes: ("off" | "all" | "one")[] = ["off", "all", "one"];
@@ -344,11 +338,6 @@ export function FullPlayer() {
 
   const toggleShuffle = () => {
     setIsShuffled(!isShuffled);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
-  const toggleMute = () => {
-    setIsMuted(!isMuted);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -466,7 +455,7 @@ export function FullPlayer() {
                       className="text-white text-2xl font-bold text-center mb-2"
                       numberOfLines={2}
                     >
-                      {currentSong.title}
+                      {currentSong?.title || "Unknown Song"}
                     </Text>
                     <Text
                       className="text-neutral-400 text-base text-center"
@@ -477,17 +466,23 @@ export function FullPlayer() {
                   </View>
                   <TouchableOpacity
                     onPress={() => {
-                      toggleLike(currentSong.id);
+                      currentSong?.id && toggleLike(currentSong.id);
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     }}
                     className="ml-2 p-2"
                   >
                     <StyledIonicons
                       name={
-                        isLikedSong(currentSong.id) ? "heart" : "heart-outline"
+                        currentSong?.id && isLikedSong(currentSong.id)
+                          ? "heart"
+                          : "heart-outline"
                       }
                       size={32}
-                      color={isLikedSong(currentSong.id) ? "#ff0000" : "#fff"}
+                      color={
+                        currentSong?.id && isLikedSong(currentSong.id)
+                          ? "#ff0000"
+                          : "#fff"
+                      }
                     />
                   </TouchableOpacity>
                 </View>
@@ -508,7 +503,7 @@ export function FullPlayer() {
             ) : (
               <View className="flex-1">
                 <LyricsList
-                  lyrics={currentSong.lyrics || []}
+                  lyrics={currentSong?.lyrics || []}
                   activeIndex={activeIndex}
                   fontSizeClass={getFontSizeClass()}
                   onClose={() => setShowLyrics(false)}

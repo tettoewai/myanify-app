@@ -15,7 +15,6 @@ import { withUniwind } from "uniwind";
 
 const StyledIonicons = withUniwind(Ionicons);
 
-const ANDROID_CLIENT_ID = Constants.expoConfig?.extra?.google?.androidClientId;
 const IOS_CLIENT_ID = Constants.expoConfig?.extra?.google?.iosClientId;
 const WEB_CLIENT_ID = Constants.expoConfig?.extra?.google?.webClientId;
 

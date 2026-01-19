@@ -2,9 +2,7 @@ import { StyledImage as Image } from "@/components/styled";
 import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
-import { apiClient } from "@/lib/api";
 import { Ionicons } from "@expo/vector-icons";
-import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useSegments } from "expo-router";
@@ -38,16 +36,6 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
   const { isLikedSong, toggleLike } = useLikeSong();
   const animationDuration = 500;
 
-  // Fetch play history to check if user has any recent plays
-  const { data: playHistoryData, isLoading: isLoadingPlayHistory } = useQuery({
-    queryKey: ["play-history", "check"],
-    queryFn: () => apiClient.get("/play-history?limit=1"),
-    enabled: !!token,
-  });
-
-  const hasPlayHistory =
-    playHistoryData?.data && playHistoryData.data.length > 0;
-
   // Hide mini player when on player page or if no session
   const segmentsArray = segments as string[];
   const isOnPlayerPage = segmentsArray.includes("player");
@@ -58,12 +46,7 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
 
   // Determine if miniplayer should be visible
   const shouldBeVisible =
-    !!token &&
-    !!currentSong &&
-    !isOnPlayerPage &&
-    !isAuthPage &&
-    !isLandingPage &&
-    (isLoadingPlayHistory || hasPlayHistory);
+    !!token && !!currentSong && !isOnPlayerPage && !isAuthPage && !isLandingPage;
 
   const TAB_BAR_HEIGHT = 60 + insets.bottom;
   const targetBottom =
