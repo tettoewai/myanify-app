@@ -1,3 +1,4 @@
+import { RequireAuth } from "@/components/auth/RequireAuth";
 import {
   StyledImage as Image,
   StyledSafeAreaView as SafeAreaView,
@@ -7,6 +8,7 @@ import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { useLibrary } from "@/hooks/useLibrary";
 import { apiClient } from "@/lib/api";
+import { formatSongFromApi } from "@/lib/song-format";
 import { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -51,16 +53,25 @@ const StatCard = ({
 );
 
 export default function PlaylistDetails() {
+  return (
+    <RequireAuth>
+      <PlaylistDetailsScreen />
+    </RequireAuth>
+  );
+}
+
+function PlaylistDetailsScreen() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { token } = useAuth();
   const {
     playSong,
-    setQueue,
+    playFromContext,
     currentSong: playingSong,
     isPlaying,
   } = usePlayer();
+  const [actionSong, setActionSong] = useState<Song | null>(null);
   const { isLikedSong, toggleLike } = useLikeSong();
   const { deletePlaylist, removeFromPlaylist, updatePlaylist } = useLibrary();
   const { toast } = useToast();
@@ -81,56 +92,29 @@ export default function PlaylistDetails() {
     enabled: !!id && !!token,
   });
 
-  // Transform songs to match our Song type
   const songs: Song[] = useMemo(() => {
     if (!playlist?.songs) return [];
-    return playlist.songs.map((item: any) => {
-      const song = item.song || item;
-      return {
-        id: song.id,
-        title: song.title,
-        coverUrl: song.coverUrl || song.album?.coverUrl || "",
-        albumCoverUrl: song.album?.coverUrl || song.coverUrl || null,
-        artists: song.artists || [],
-        artist:
-          song.artists?.map((a: any) => a.artist?.name || a.name).join(", ") ||
-          "",
-        album: song.album
-          ? {
-              id: song.album.id,
-              name: song.album.name,
-              coverUrl: song.album.coverUrl || "",
-            }
-          : undefined,
-        duration: song.duration || 0,
-        audioUrl: song.audioUrl || "",
-        genre: song.genre?.name || "",
-        lyrics:
-          song.lyrics?.map((l: any) => ({ time: l.time, text: l.text })) || [],
-        isPremium: song.isPremium || false,
-      };
-    });
+    return playlist.songs.map((item: any) =>
+      formatSongFromApi(item.song || item),
+    );
   }, [playlist]);
 
   const handlePlayAll = () => {
     if (songs.length > 0) {
-      setQueue(songs);
-      playSong(songs[0]);
+      void playFromContext(songs[0], songs, "playlist");
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
   };
 
   const handlePlaySong = (song: Song) => {
-    setQueue(songs);
-    playSong(song);
+    void playFromContext(song, songs, "playlist");
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleShuffle = () => {
     if (songs.length > 0) {
       const shuffled = [...songs].sort(() => Math.random() - 0.5);
-      setQueue(shuffled);
-      playSong(shuffled[0]);
+      void playFromContext(shuffled[0], shuffled, "playlist");
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
   };
@@ -249,7 +233,8 @@ export default function PlaylistDetails() {
         </Text>
         <View className="relative">
           <Image
-            source={{ uri: item.coverUrl }}
+            uri={item.coverUrl}
+            variant="album"
             className="w-14 h-14 rounded-lg"
             contentFit="cover"
           />
@@ -343,7 +328,8 @@ export default function PlaylistDetails() {
       >
         {playlist.coverUrl ? (
           <Image
-            source={{ uri: playlist.coverUrl }}
+            uri={playlist.coverUrl}
+            variant="playlist"
             className="w-full h-full"
             contentFit="cover"
           />

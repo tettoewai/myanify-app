@@ -16,7 +16,7 @@
     "@heroui/react": "^3.0.0-beta.3",
     "@heroui/styles": "^3.0.0-beta.3",
     "@react-native-community/slider": "5.0.1",
-    "@react-native-google-signin/google-signin": "^16.1.1",
+    "@react-native-google-signin/google-signin": "^16.1.2",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",

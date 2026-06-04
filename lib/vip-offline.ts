@@ -273,7 +273,7 @@ export class OfflineDownloadManager {
       const downloads = await apiClient.get("/vip/downloads");
       const download = downloads.downloads?.find((d: any) => d.songId === songId);
       if (download?.id) {
-        await apiClient.patch(`/api/vip/downloads/${download.id}`, {
+        await apiClient.patch(`/vip/downloads/${download.id}`, {
           progress,
           status: progress < 100 ? "DOWNLOADING" : "COMPLETED",
         });

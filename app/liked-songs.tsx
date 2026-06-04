@@ -1,8 +1,10 @@
+import { RequireAuth } from "@/components/auth/RequireAuth";
 import {
   StyledImage as Image,
   StyledSafeAreaView as SafeAreaView,
 } from "@/components/styled";
 import { usePlayer } from "@/context/PlayerContext";
+import { SongActionSheet } from "@/components/SongActionSheet";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
@@ -26,8 +28,17 @@ const StyledIonicons = withUniwind(Ionicons);
 type SortOption = "recent" | "title" | "artist";
 
 export default function LikedSongs() {
+  return (
+    <RequireAuth>
+      <LikedSongsScreen />
+    </RequireAuth>
+  );
+}
+
+function LikedSongsScreen() {
   const { likedSongs, isLoading, toggleLike } = useLikeSong();
-  const { playSong, setQueue, currentSong } = usePlayer();
+  const { playFromContext, setIsShuffled, currentSong } = usePlayer();
+  const [actionSong, setActionSong] = useState<Song | null>(null);
   const router = useRouter();
   const [sortBy, setSortBy] = useState<SortOption>("recent");
   const [showSortModal, setShowSortModal] = useState(false);
@@ -48,16 +59,15 @@ export default function LikedSongs() {
     }
   }, [likedSongs, sortBy]);
 
-  const handlePlaySong = (song: Song, contextSongs: Song[]) => {
-    setQueue(contextSongs);
-    playSong(song);
+  const handlePlaySong = (song: Song) => {
+    void playFromContext(song, sortedSongs, "playlist");
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleShuffle = () => {
     const shuffled = [...sortedSongs].sort(() => Math.random() - 0.5);
-    setQueue(shuffled);
-    playSong(shuffled[0]);
+    setIsShuffled(true);
+    void playFromContext(shuffled[0], shuffled, "playlist");
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
@@ -71,7 +81,8 @@ export default function LikedSongs() {
             ? "bg-primary/10 border border-primary/30"
             : "active:bg-card/50"
         }`}
-        onPress={() => handlePlaySong(item, sortedSongs)}
+        onPress={() => handlePlaySong(item)}
+        onLongPress={() => setActionSong(item)}
       >
         {/* Track Number / Playing Indicator */}
         <View className="w-8 items-center justify-center mr-3">
@@ -91,7 +102,8 @@ export default function LikedSongs() {
         {/* Album Art */}
         <View className="w-14 h-14 rounded-lg overflow-hidden mr-3 shadow">
           <Image
-            source={{ uri: item.coverUrl || "https://via.placeholder.com/150" }}
+            uri={item.coverUrl}
+            variant="album"
             className="w-full h-full"
             contentFit="cover"
           />
@@ -242,7 +254,7 @@ export default function LikedSongs() {
                   <View className="flex-row w-full gap-3">
                     <TouchableOpacity
                       onPress={() =>
-                        handlePlaySong(sortedSongs[0], sortedSongs)
+                        handlePlaySong(sortedSongs[0])
                       }
                       className="flex-1 bg-primary h-14 rounded-full flex-row items-center justify-center shadow-lg"
                     >

@@ -1,3 +1,4 @@
+import { SignInPrompt } from "@/components/auth/SignInPrompt";
 import {
   StyledImage as Image,
   StyledSafeAreaView as SafeAreaView,
@@ -6,85 +7,121 @@ import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { apiClient } from "@/lib/api";
+import { formatSongFromApi } from "@/lib/song-format";
 import { Album, Artist, Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import { Card } from "heroui-native";
-import { useCallback, useMemo } from "react";
-import {
-  ActivityIndicator,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { type Href, useRouter } from "expo-router";
+import { Card, Spinner } from "heroui-native";
+import { useMemo, useState } from "react";
+import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { SongActionSheet } from "@/components/SongActionSheet";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function Home() {
   const router = useRouter();
-  const { playSong, setQueue, currentSong } = usePlayer();
+  const insets = useSafeAreaInsets();
+  const { playSong, playFromContext, currentSong } = usePlayer();
+  const [actionSong, setActionSong] = useState<Song | null>(null);
   const { isLikedSong, toggleLike } = useLikeSong();
-  const { token } = useAuth();
+  const { token, isLoading: authLoading } = useAuth();
 
-  const {
-    data: songsData,
-    isLoading: songsLoading,
-    refetch: refetchSongs,
-    isRefetching: isRefetchingSongs,
-  } = useQuery({
+  const { data: songsData, isLoading: songsLoading } = useQuery({
     queryKey: ["songs", "recent"],
     queryFn: () => apiClient.get("/songs?limit=10&isPublished=true"),
     enabled: !!token,
   });
 
-  const {
-    data: artistsData,
-    isLoading: artistsLoading,
-    refetch: refetchArtists,
-    isRefetching: isRefetchingArtists,
-  } = useQuery({
+  const { data: artistsData, isLoading: artistsLoading } = useQuery({
     queryKey: ["artists", "top"],
     queryFn: () => apiClient.get("/artists?limit=10"),
     enabled: !!token,
   });
 
-  const {
-    data: albumsData,
-    isLoading: albumsLoading,
-    refetch: refetchAlbums,
-    isRefetching: isRefetchingAlbums,
-  } = useQuery({
+  const { data: albumsData, isLoading: albumsLoading } = useQuery({
     queryKey: ["albums", "new"],
     queryFn: () => apiClient.get("/albums?limit=10"),
     enabled: !!token,
   });
 
   const isLoading = songsLoading || artistsLoading || albumsLoading;
-  const isRefreshing =
-    isRefetchingSongs || isRefetchingArtists || isRefetchingAlbums;
+  const isInitialLoading =
+    isLoading && !songsData && !artistsData && !albumsData;
 
-  const onRefresh = useCallback(() => {
-    refetchSongs();
-    refetchArtists();
-    refetchAlbums();
-  }, [refetchSongs, refetchArtists, refetchAlbums]);
-
-  // Dynamic greeting based on time of day
   const greeting = useMemo(() => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good Morning";
-    if (hour < 17) return "Good Afternoon";
-    if (hour < 22) return "Good Evening";
-    return "Good Night";
+    const now = new Date();
+    const hour = now.getHours();
+    const timeLabel = now.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    if (hour >= 5 && hour < 9)
+      return {
+        title: "Good morning",
+        subtitle: `${timeLabel} · Ease into the day with something you love`,
+      };
+    if (hour >= 9 && hour < 12)
+      return {
+        title: "Good morning",
+        subtitle: `${timeLabel} · Great time to discover your next favorite song`,
+      };
+    if (hour >= 12 && hour < 14)
+      return {
+        title: "Good afternoon",
+        subtitle: `${timeLabel} · Take a break and press play`,
+      };
+    if (hour >= 14 && hour < 17)
+      return {
+        title: "Good afternoon",
+        subtitle: `${timeLabel} · Keep the energy going with fresh tracks`,
+      };
+    if (hour >= 17 && hour < 20)
+      return {
+        title: "Good evening",
+        subtitle: `${timeLabel} · Unwind with your favorite artists`,
+      };
+    if (hour >= 20 && hour < 22)
+      return {
+        title: "Good evening",
+        subtitle: `${timeLabel} · Settle in and enjoy the music`,
+      };
+    if (hour >= 22 || hour < 1)
+      return {
+        title: "Good night",
+        subtitle: `${timeLabel} · Wind down with something mellow`,
+      };
+    return {
+      title: "Hey, night owl",
+      subtitle: `${timeLabel} · Late-night listening hits different`,
+    };
   }, []);
 
-  if (isLoading) {
+  if (authLoading) {
     return (
       <View className="flex-1 justify-center items-center bg-background">
-        <ActivityIndicator size="large" color="#ff0000" />
+        <Spinner size="lg" color="#ff0000" />
+      </View>
+    );
+  }
+
+  if (!token) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
+        <SignInPrompt
+          title="Sign in to listen"
+          description="Browse Myanmar music, build playlists, and enjoy synchronized lyrics."
+          compact
+        />
+      </SafeAreaView>
+    );
+  }
+
+  if (isInitialLoading) {
+    return (
+      <View className="flex-1 justify-center items-center bg-background">
+        <Spinner size="lg" color="#ff0000" />
       </View>
     );
   }
@@ -92,38 +129,15 @@ export default function Home() {
   const rawSongs: any[] = songsData?.data || [];
   const artists: Artist[] = artistsData?.data || [];
   const albums: Album[] = albumsData?.data || [];
+  const songs: Song[] = rawSongs.map(formatSongFromApi);
 
-  // Transform songs to match our Song type
-  const songs: Song[] = rawSongs.map((song: any) => ({
-    id: song.id,
-    title: song.title,
-    coverUrl: song.coverUrl || song.album?.coverUrl || "",
-    albumCoverUrl: song.album?.coverUrl || song.coverUrl || null,
-    artists: song.artists || [],
-    artist:
-      song.artists?.map((a: any) => a.artist?.name || a.name).join(", ") || "",
-    album: song.album
-      ? {
-        id: song.album.id,
-        name: song.album.name,
-        coverUrl: song.album.coverUrl || "",
-      }
-      : undefined,
-    duration: song.duration || 0,
-    audioUrl: song.audioUrl || "",
-    genre: song.genre?.name || "",
-    lyrics:
-      song.lyrics?.map((l: any) => ({ time: l.time, text: l.text })) || [],
-    isPremium: song.isPremium || false,
-  }));
-
-  const handlePlaySong = (song: Song) => {
-    // Set queue if not already set
-    if (songs.length > 0) {
-      setQueue(songs);
+  const handlePlaySong = (song: Song, context?: Song[]) => {
+    if (context && context.length > 1) {
+      void playFromContext(song, context, "playlist");
+    } else {
+      void playSong(song);
     }
-    playSong(song);
-    router.push("/player");
+    router.push(`/song/${song.id}` as Href);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -132,44 +146,31 @@ export default function Home() {
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            tintColor="#ff0000"
-            colors={["#ff0000"]}
-          />
-        }
+        contentContainerStyle={{ flexGrow: 1 }}
       >
         <View className={`flex-1 ${currentSong ? "pb-20" : ""}`}>
-          {/* Enhanced Header with Gradient */}
+          {/* Header */}
           <LinearGradient
             colors={["rgba(255, 0, 0, 0.15)", "rgba(0, 0, 0, 0)"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
-            className="px-2 pt-6 pb-6"
+            style={{
+              marginTop: -insets.top,
+              paddingTop: insets.top + 10,
+            }}
+            className="px-4"
           >
-            <View className="flex-row justify-between items-center mb-6 px-3">
-              <View className="flex-row items-center gap-1">
-                {/* <View className="bg-red-600/20 p-3 rounded-full">
-                  <Ionicons name={greetingIcon} size={28} color="#ff0000" />
-                </View> */}
-                <View>
-                  <Text className="text-2xl font-bold text-foreground">
-                    {greeting}
-                  </Text>
-                  <Text className="text-sm text-muted-foreground mt-1">
-                    Ready to discover new music?
-                  </Text>
-                </View>
+            <View className="flex-row justify-between items-start mt-10 mb-6 px-3">
+              <View className="flex-1 pr-4">
+                <Text className="text-2xl font-bold text-foreground">
+                  {greeting.title}
+                </Text>
+                <Text className="text-sm text-muted-foreground mt-1">
+                  {greeting.subtitle}
+                </Text>
               </View>
               <View className="flex-row gap-3">
-                <TouchableOpacity
-                  className="bg-white/10 p-2.5 rounded-full"
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }}
-                >
+                <TouchableOpacity className="bg-white/10 p-2.5 rounded-full">
                   <Ionicons
                     name="notifications-outline"
                     size={22}
@@ -178,10 +179,7 @@ export default function Home() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   className="bg-white/10 p-2.5 rounded-full"
-                  onPress={() => {
-                    router.push("/(tabs)/setting");
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }}
+                  onPress={() => router.push("/(tabs)/setting")}
                 >
                   <Ionicons name="settings-outline" size={22} color="white" />
                 </TouchableOpacity>
@@ -191,14 +189,10 @@ export default function Home() {
             {/* Quick Access Cards */}
             <View className="flex-row gap-3 mt-2">
               <TouchableOpacity
-                className="flex-1 bg-linear-to-br from-red-600/20 to-red-800/20 border border-red-500/30 rounded-2xl p-4"
-                onPress={() => {
-                  router.push("/liked-songs");
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                }}
-                activeOpacity={0.7}
+                className="flex-1 bg-red-600/20 border border-red-500/30 rounded-2xl p-4"
+                onPress={() => router.push("/liked-songs")}
               >
-                <View className="flex-row items-center justify-between">
+                <View className="flex-row justify-between">
                   <View>
                     <Ionicons name="heart" size={24} color="#ff0000" />
                     <Text className="text-foreground font-bold text-base mt-2">
@@ -208,16 +202,11 @@ export default function Home() {
                   <Ionicons name="chevron-forward" size={20} color="#888" />
                 </View>
               </TouchableOpacity>
-
               <TouchableOpacity
-                className="flex-1 bg-linear-to-br from-purple-600/20 to-purple-800/20 border border-purple-500/30 rounded-2xl p-4"
-                onPress={() => {
-                  router.push("/(tabs)/library");
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                }}
-                activeOpacity={0.7}
+                className="flex-1 bg-purple-600/20 border border-purple-500/30 rounded-2xl p-4"
+                onPress={() => router.push("/(tabs)/library")}
               >
-                <View className="flex-row items-center justify-between">
+                <View className="flex-row justify-between">
                   <View>
                     <Ionicons name="library" size={24} color="#8b5cf6" />
                     <Text className="text-foreground font-bold text-base mt-2">
@@ -230,8 +219,8 @@ export default function Home() {
             </View>
           </LinearGradient>
 
-          <View className="px-4">
-            {/* New Releases with Enhanced Design */}
+          <View className="pt-5">
+            {/* New Releases */}
             <Section
               title="New Releases"
               subtitle="Fresh music for you"
@@ -243,51 +232,33 @@ export default function Home() {
                   {songs.map((song) => (
                     <TouchableOpacity
                       key={song.id}
-                      onPress={() => handlePlaySong(song)}
+                      onPress={() => handlePlaySong(song, songs)}
+                      onLongPress={() => {
+                        setActionSong(song);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      }}
                       activeOpacity={0.8}
                     >
                       <Card variant="transparent" className="w-[150px] p-0">
-                        <View
-                          className="relative"
-                          style={{
-                            shadowColor: "#000",
-                            shadowOffset: { width: 0, height: 4 },
-                            shadowOpacity: 0.3,
-                            shadowRadius: 8,
-                            elevation: 5,
-                          }}
-                        >
+                        <View className="relative shadow-lg">
                           <Image
-                            source={{
-                              uri: song.coverUrl || song.album?.coverUrl,
-                            }}
+                            uri={song.coverUrl || song.album?.coverUrl}
+                            variant="album"
                             className="w-[150px] h-[150px] rounded-2xl"
                             contentFit="cover"
                             transition={200}
                           />
-                          {/* Play Button Overlay */}
                           <View className="absolute inset-0 items-center justify-center">
                             <View className="bg-red-600 rounded-full p-3 opacity-0 active:opacity-100">
                               <Ionicons name="play" size={24} color="white" />
                             </View>
                           </View>
-                          {/* Like Button */}
                           <TouchableOpacity
                             onPress={(e) => {
                               e.stopPropagation();
-                              toggleLike(song.id);
-                              Haptics.impactAsync(
-                                Haptics.ImpactFeedbackStyle.Medium
-                              );
+                              toggleLike(song);
                             }}
-                            className="absolute top-2 right-2 bg-black/60 backdrop-blur rounded-full p-2"
-                            style={{
-                              shadowColor: "#000",
-                              shadowOffset: { width: 0, height: 2 },
-                              shadowOpacity: 0.3,
-                              shadowRadius: 4,
-                              elevation: 3,
-                            }}
+                            className="absolute top-2 right-2 bg-black/60 rounded-full p-2"
                           >
                             <Ionicons
                               name={
@@ -306,7 +277,7 @@ export default function Home() {
                             {song.title}
                           </Card.Title>
                           <Card.Description
-                            className="text-muted-foreground text-xs mt-1 text-center"
+                            className="text-muted-foreground text-xs text-center"
                             numberOfLines={1}
                           >
                             {song.artists.map((a) => a.artist.name).join(", ")}
@@ -319,50 +290,35 @@ export default function Home() {
               </ScrollView>
             </Section>
 
-            {/* Popular Artists with Enhanced Design */}
+            {/* Popular Artists */}
             <Section
               title="Popular Artists"
               subtitle="Most listened artists"
               icon="mic"
               iconColor="#ff0000"
-              className="mt-10"
+              className="mt-5"
             >
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View className="flex-row gap-5">
                   {artists.map((artist) => (
                     <TouchableOpacity
                       key={artist.id}
-                      onPress={() => {
+                      onPress={() =>
                         router.push({
                           pathname: "/artist/[id]",
                           params: { id: artist.id },
-                        });
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      }}
-                      activeOpacity={0.7}
+                        })
+                      }
                     >
                       <View className="items-center w-[120px]">
-                        <View
-                          className="relative"
-                          style={{
-                            shadowColor: "#ff0000",
-                            shadowOffset: { width: 0, height: 4 },
-                            shadowOpacity: 0.3,
-                            shadowRadius: 12,
-                            elevation: 6,
-                          }}
-                        >
+                        <View className="relative shadow-lg">
                           <Image
-                            source={{
-                              uri:
-                                artist.imageUrl ||
-                                "https://via.placeholder.com/120",
-                            }}
+                            uri={artist.imageUrl}
+                            variant="artist"
                             className="w-[120px] h-[120px] rounded-full border-4 border-white/10"
                             contentFit="cover"
                             transition={200}
                           />
-                          {/* Verified Badge */}
                           <View className="absolute bottom-0 right-0 bg-primary rounded-full p-1.5">
                             <Ionicons
                               name="checkmark-circle"
@@ -390,47 +346,37 @@ export default function Home() {
               </ScrollView>
             </Section>
 
-            {/* Featured Albums with Enhanced Design */}
+            {/* Featured Albums */}
             <Section
               title="Featured Albums"
               subtitle="Curated just for you"
               icon="disc"
               iconColor="#ff0000"
-              className="mt-10"
+              className="mt-5"
             >
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View className="flex-row gap-4">
                   {albums.map((album) => (
                     <TouchableOpacity
                       key={album.id}
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      }}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/album/[id]",
+                          params: { id: album.id },
+                        })
+                      }
                     >
                       <Card variant="transparent" className="w-[170px] p-0">
-                        <View
-                          style={{
-                            shadowColor: "#000",
-                            shadowOffset: { width: 0, height: 6 },
-                            shadowOpacity: 0.4,
-                            shadowRadius: 10,
-                            elevation: 8,
-                          }}
-                        >
+                        <View className="shadow-xl">
                           <Image
-                            source={{
-                              uri:
-                                album.coverUrl ||
-                                "https://via.placeholder.com/170",
-                            }}
+                            uri={album.coverUrl}
+                            variant="album"
                             className="w-[170px] h-[170px] rounded-2xl"
                             contentFit="cover"
                             transition={200}
                           />
-                          {/* Play Button Overlay */}
                           <View className="absolute inset-0 items-center justify-center">
-                            <View className="bg-red-600/90 backdrop-blur rounded-full p-4 opacity-0 active:opacity-100">
+                            <View className="bg-red-600/90 rounded-full p-4 opacity-0 active:opacity-100">
                               <Ionicons name="play" size={28} color="white" />
                             </View>
                           </View>
@@ -442,10 +388,7 @@ export default function Home() {
                           >
                             {album.name}
                           </Card.Title>
-                          <Card.Description
-                            className="text-muted-foreground text-xs mt-1 text-center"
-                            numberOfLines={1}
-                          >
+                          <Card.Description className="text-muted-foreground text-xs text-center mt-1">
                             Album
                           </Card.Description>
                         </Card.Body>
@@ -455,12 +398,15 @@ export default function Home() {
                 </View>
               </ScrollView>
             </Section>
-
-            {/* Bottom Spacer */}
             <View className="h-8" />
           </View>
         </View>
       </ScrollView>
+      <SongActionSheet
+        song={actionSong}
+        visible={!!actionSong}
+        onClose={() => setActionSong(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -472,34 +418,25 @@ function Section({
   iconColor,
   children,
   className,
-}: {
-  title: string;
-  subtitle?: string;
-  icon?: keyof typeof Ionicons.glyphMap;
-  iconColor?: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
+}: any) {
   return (
     <View className={className}>
-      <View className="mb-4">
-        <View className="flex-row items-center gap-3">
-          {!!icon && (
-            <View
-              className="p-2 rounded-full"
-              style={{ backgroundColor: `${iconColor}20` }}
-            >
-              <Ionicons name={icon} size={24} color={iconColor || "#fff"} />
-            </View>
-          )}
-          <View className="flex-1">
-            <Text className="text-2xl font-bold text-foreground">{title}</Text>
-            {!!subtitle && (
-              <Text className="text-sm text-muted-foreground mt-1">
-                {subtitle}
-              </Text>
-            )}
+      <View className="mb-4 flex-row items-center gap-3">
+        {icon && (
+          <View
+            className="p-2 rounded-full"
+            style={{ backgroundColor: `${iconColor}20` }}
+          >
+            <Ionicons name={icon} size={24} color={iconColor} />
           </View>
+        )}
+        <View className="flex-1">
+          <Text className="text-2xl font-bold text-foreground">{title}</Text>
+          {subtitle && (
+            <Text className="text-sm text-muted-foreground mt-1">
+              {subtitle}
+            </Text>
+          )}
         </View>
       </View>
       {children}

@@ -24,8 +24,7 @@ export const offlineStorage = {
         const progress =
           downloadProgress.totalBytesWritten /
           downloadProgress.totalBytesExpectedToWrite;
-        console.log(`Download progress: ${progress * 100}%`);
-      }
+      },
     );
 
     try {

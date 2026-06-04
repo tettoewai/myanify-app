@@ -1,17 +1,18 @@
+import { SignInPrompt } from "@/components/auth/SignInPrompt";
 import {
   StyledImage as Image,
   StyledSafeAreaView as SafeAreaView,
 } from "@/components/styled";
+import { useAuth } from "@/context/AuthContext";
 import { useLibrary } from "@/hooks/useLibrary";
 import { Artist, Playlist } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useToast } from "heroui-native";
+import { Spinner, useToast } from "heroui-native";
 import { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Modal,
   Pressable,
@@ -29,6 +30,7 @@ type TabType = "playlists" | "artists";
 type ViewMode = "list" | "grid";
 
 export default function Library() {
+  const { token, isLoading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>("playlists");
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
@@ -40,6 +42,7 @@ export default function Library() {
     likedArtists,
     playlists,
     isLoading,
+    isRefetching,
     refetch,
     createPlaylist,
     isCreatingPlaylist,
@@ -170,9 +173,8 @@ export default function Library() {
           }}
         >
           <Image
-            source={{
-              uri: playlist.coverUrl || "https://via.placeholder.com/150",
-            }}
+            uri={playlist.coverUrl}
+            variant="playlist"
             className="w-full aspect-square rounded-xl shadow-lg"
             contentFit="cover"
           />
@@ -198,9 +200,8 @@ export default function Library() {
         }}
       >
         <Image
-          source={{
-            uri: playlist.coverUrl || "https://via.placeholder.com/150",
-          }}
+          uri={playlist.coverUrl}
+          variant="playlist"
           className="w-16 h-16 rounded-xl mr-4 shadow"
           contentFit="cover"
         />
@@ -233,9 +234,8 @@ export default function Library() {
           }}
         >
           <Image
-            source={{
-              uri: item.imageUrl || "https://via.placeholder.com/150",
-            }}
+            uri={item.imageUrl}
+            variant="artist"
             className="w-full aspect-square rounded-full shadow-lg"
             contentFit="cover"
           />
@@ -264,7 +264,8 @@ export default function Library() {
         }}
       >
         <Image
-          source={{ uri: item.imageUrl || "https://via.placeholder.com/150" }}
+          uri={item.imageUrl}
+          variant="artist"
           className="w-16 h-16 rounded-full mr-4 shadow"
           contentFit="cover"
         />
@@ -281,6 +282,15 @@ export default function Library() {
     );
   };
 
+  const refreshControl = (
+    <RefreshControl
+      refreshing={isRefetching}
+      onRefresh={refetch}
+      tintColor="#ff0000"
+      colors={["#ff0000"]}
+    />
+  );
+
   const renderContent = () => {
     if (
       isLoading &&
@@ -290,7 +300,7 @@ export default function Library() {
     ) {
       return (
         <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#ff0000" />
+          <Spinner size="lg" color="#ff0000" />
         </View>
       );
     }
@@ -307,13 +317,7 @@ export default function Library() {
           keyExtractor={(item) => item.id}
           numColumns={viewMode === "grid" ? 2 : 1}
           key={viewMode}
-          refreshControl={
-            <RefreshControl
-              refreshing={isLoading}
-              onRefresh={refetch}
-              tintColor="#ff0000"
-            />
-          }
+          refreshControl={refreshControl}
           ListEmptyComponent={
             <View className="flex-1 justify-center items-center pt-20 px-6">
               <StyledIonicons
@@ -344,13 +348,7 @@ export default function Library() {
           keyExtractor={(item) => item.id}
           numColumns={viewMode === "grid" ? 2 : 1}
           key={viewMode}
-          refreshControl={
-            <RefreshControl
-              refreshing={isLoading}
-              onRefresh={refetch}
-              tintColor="#ff0000"
-            />
-          }
+          refreshControl={refreshControl}
           ListEmptyComponent={
             <View className="flex-1 justify-center items-center pt-20 px-6">
               <StyledIonicons
@@ -375,6 +373,28 @@ export default function Library() {
 
     return null;
   };
+
+  if (authLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
+        <View className="flex-1 justify-center items-center">
+          <Spinner size="lg" color="#ff0000" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!token) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
+        <SignInPrompt
+          title="Sign in to open your library"
+          description="Save liked songs, follow artists, and create playlists."
+          compact
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
@@ -627,7 +647,7 @@ export default function Library() {
                     }`}
                 >
                   {isCreatingPlaylist ? (
-                    <ActivityIndicator size="small" color="white" />
+                    <Spinner color="white" size="sm" />
                   ) : (
                     <View className="flex-row items-center justify-center">
                       <StyledIonicons

@@ -1,11 +1,8 @@
-import Constants from "expo-constants";
 import { authStorage } from "./auth-storage";
+import { notifyUnauthorized } from "./auth-session";
+import { getApiBaseUrl } from "./env";
 
-// Try to get API_URL from environment variable first (for development),
-// then fall back to app.json config (for builds)
-const API_URL = (
-  process.env.EXPO_PUBLIC_API_URL || Constants.expoConfig?.extra?.apiUrl
-)?.replace(/\/$/, "");
+const API_URL = getApiBaseUrl();
 
 export const apiClient = {
   async fetch(endpoint: string, options: RequestInit = {}) {
@@ -33,17 +30,23 @@ export const apiClient = {
         const responseText = await response.text();
         try {
           errorData = JSON.parse(responseText);
-        } catch (e) {
-          errorData = { message: responseText };
+        } catch {
+          const isHtml = responseText.trimStart().startsWith("<");
+          errorData = {
+            message: isHtml
+              ? `API route not found (${response.status}): ${endpoint}`
+              : responseText,
+          };
         }
 
-        // Don't log 401 errors - they're expected when user is not authenticated
         const isAuthError = response.status === 401;
 
-        if (
-          errorData.message?.includes("Tunnel") ||
-          errorData.message?.includes("not found")
-        ) {
+        if (isAuthError && token) {
+          await authStorage.removeToken();
+          notifyUnauthorized();
+        }
+
+        if (errorData.message?.includes("Tunnel")) {
           errorData.message =
             "The API server is unreachable. Please ensure your backend is running and the API_URL in your .env file is correct.";
         }
@@ -60,7 +63,7 @@ export const apiClient = {
 
         throw new Error(
           errorData.message ||
-          `API request failed with status ${response.status}: ${response.statusText}`
+            `API request failed with status ${response.status}: ${response.statusText}`,
         );
       }
 
@@ -70,30 +73,28 @@ export const apiClient = {
       } catch (e) {
         return responseText;
       }
-    } catch (networkError: any) {
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Unknown request error";
+      const isNetworkFailure =
+        error instanceof TypeError ||
+        /network request failed|failed to fetch|network error/i.test(message);
+
+      if (!isNetworkFailure) {
+        throw error;
+      }
+
       const helpfulMessage =
         "The API server is unreachable. Please ensure your backend is running and the API_URL in your .env file is correct.";
 
-      // Don't log network errors for 401 responses (auth errors)
-      const isAuthError =
-        networkError.message?.includes("401") ||
-        networkError.message?.includes("Unauthorized");
-
-      if (!isAuthError) {
-        const fullUrl = `${API_URL}${cleanEndpoint}`;
-        console.error("Network Fetch Error Details:", {
-          message: networkError.message,
-          helpfulMessage: helpfulMessage,
-          stack: networkError.stack,
-          originalError: networkError.message,
-          url: fullUrl,
-          apiUrl: API_URL,
-        });
-        const enhancedError = new Error(helpfulMessage);
-        (enhancedError as any).originalError = networkError;
-        throw enhancedError;
-      }
-      throw networkError;
+      console.error("Network Fetch Error Details:", {
+        message,
+        url: `${API_URL}${cleanEndpoint}`,
+        apiUrl: API_URL,
+      });
+      const enhancedError = new Error(helpfulMessage);
+      (enhancedError as { originalError?: unknown }).originalError = error;
+      throw enhancedError;
     }
   },
 

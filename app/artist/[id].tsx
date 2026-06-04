@@ -1,3 +1,4 @@
+import { RequireAuth } from "@/components/auth/RequireAuth";
 import {
   StyledImage as Image,
   StyledSafeAreaView as SafeAreaView,
@@ -7,6 +8,7 @@ import { usePlayer } from "@/context/PlayerContext";
 import { useLikeArtist } from "@/hooks/useLikeArtist";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { apiClient } from "@/lib/api";
+import { formatSongFromApi } from "@/lib/song-format";
 import { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -47,6 +49,14 @@ const StatCard = ({
 );
 
 export default function ArtistDetails() {
+  return (
+    <RequireAuth>
+      <ArtistDetailsScreen />
+    </RequireAuth>
+  );
+}
+
+function ArtistDetailsScreen() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const { id } = useLocalSearchParams<{ id: string }>();
   const { token } = useAuth();
@@ -61,10 +71,12 @@ export default function ArtistDetails() {
   const router = useRouter();
   const {
     playSong,
-    setQueue,
+    playFromContext,
     currentSong: playingSong,
     isPlaying,
+    setIsShuffled,
   } = usePlayer();
+  const [actionSong, setActionSong] = React.useState<Song | null>(null);
 
   const { isLikedSong, toggleLike } = useLikeSong();
 
@@ -76,48 +88,22 @@ export default function ArtistDetails() {
     enabled: !!id && !!token,
   });
 
-  // Transform songs to match our Song type
   const songs: Song[] = useMemo(() => {
     if (!artist?.songs) return [];
-    return artist.songs.map((item: any) => {
-      const song = item.song || item;
-      return {
-        id: song.id,
-        title: song.title,
-        coverUrl: song.coverUrl || song.album?.coverUrl || "",
-        albumCoverUrl: song.album?.coverUrl || song.coverUrl || null,
-        artists: song.artists || [],
-        artist:
-          song.artists?.map((a: any) => a.artist?.name || a.name).join(", ") ||
-          "",
-        album: song.album
-          ? {
-              id: song.album.id,
-              name: song.album.name,
-              coverUrl: song.album.coverUrl || "",
-            }
-          : undefined,
-        duration: song.duration || 0,
-        audioUrl: song.audioUrl || "",
-        genre: song.genre?.name || "",
-        lyrics:
-          song.lyrics?.map((l: any) => ({ time: l.time, text: l.text })) || [],
-        isPremium: song.isPremium || false,
-      };
-    });
+    return artist.songs.map((item: any) =>
+      formatSongFromApi(item.song || item),
+    );
   }, [artist]);
 
   const handlePlayAll = () => {
     if (songs.length > 0) {
-      setQueue(songs);
-      playSong(songs[0]);
+      void playFromContext(songs[0], songs, "playlist");
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
   };
 
-  const handlePlaySong = (song: Song, index: number) => {
-    setQueue(songs);
-    playSong(song);
+  const handlePlaySong = (song: Song) => {
+    void playFromContext(song, songs, "playlist");
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -148,7 +134,6 @@ export default function ArtistDetails() {
     if (isLikedArtist(artistId)) {
       unlikeArtist.mutate(artistId);
     } else {
-      console.log("like artist", artistId);
       likeArtist.mutate(artistId);
     }
   };
@@ -158,7 +143,11 @@ export default function ArtistDetails() {
 
     return (
       <TouchableOpacity
-        onPress={() => handlePlaySong(item, index)}
+        onPress={() => handlePlaySong(item)}
+        onLongPress={() => {
+          setActionSong(item);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }}
         className={`flex-row items-center px-4 py-3 mx-2 mb-2 rounded-xl ${
           isCurrentSong ? "bg-neutral-900" : "bg-transparent"
         }`}
@@ -173,7 +162,8 @@ export default function ArtistDetails() {
         </Text>
         <View className="relative">
           <Image
-            source={{ uri: item.coverUrl }}
+            uri={item.coverUrl}
+            variant="album"
             className="w-14 h-14 rounded-lg"
             contentFit="cover"
           />
@@ -185,7 +175,7 @@ export default function ArtistDetails() {
         </View>
         <View className="ml-3 flex-1">
           <Text
-            className={`text-base font-semibold ${
+            className={`text-base font-semibold pt-2 ${
               isCurrentSong ? "text-primary" : "text-white"
             }`}
             numberOfLines={1}
@@ -207,7 +197,7 @@ export default function ArtistDetails() {
         </View>
         <TouchableOpacity
           onPress={() => {
-            toggleLike(item.id);
+            toggleLike(item);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           }}
           className="p-2"
@@ -263,7 +253,8 @@ export default function ArtistDetails() {
         }}
       >
         <Image
-          source={{ uri: artist.imageUrl }}
+          uri={artist.imageUrl}
+          variant="artist"
           className="w-full h-full"
           contentFit="cover"
         />
@@ -314,7 +305,7 @@ export default function ArtistDetails() {
         showsVerticalScrollIndicator={false}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: false }
+          { useNativeDriver: false },
         )}
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: 120 }}
@@ -326,7 +317,7 @@ export default function ArtistDetails() {
         <View className="px-6 py-4">
           <View className="flex-row items-center mb-3">
             <Text
-              className="text-white text-5xl font-black flex-1 py-1 leading-tight"
+              className="text-white text-5xl font-black flex-1 py-1 leading-loose"
               numberOfLines={2}
             >
               {artist.name}
@@ -385,11 +376,10 @@ export default function ArtistDetails() {
 
             <TouchableOpacity
               onPress={() => {
-                // Shuffle play
                 if (songs.length > 0) {
                   const shuffled = [...songs].sort(() => Math.random() - 0.5);
-                  setQueue(shuffled);
-                  playSong(shuffled[0]);
+                  setIsShuffled(true);
+                  void playFromContext(shuffled[0], shuffled, "playlist");
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 }
               }}

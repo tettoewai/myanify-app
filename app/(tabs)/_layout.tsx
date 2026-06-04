@@ -1,14 +1,28 @@
-import { Tabs } from "expo-router";
+import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import { View } from "react-native";
+import { Redirect, Tabs } from "expo-router";
+import { ActivityIndicator, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUniwind } from "uniwind";
 
 export default function TabsLayout() {
+  const { token, isLoading } = useAuth();
   const insets = useSafeAreaInsets();
   const { theme } = useUniwind();
   const isDark = theme === "dark";
   const TAB_BAR_HEIGHT = 60 + insets.bottom;
+
+  if (isLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator size="large" color="#ff0000" />
+      </View>
+    );
+  }
+
+  if (!token) {
+    return <Redirect href="/" />;
+  }
 
   return (
     <View className="flex-1">

@@ -1,9 +1,9 @@
-import { Link, Redirect } from "expo-router";
-import { Button } from "heroui-native";
-import { Text, View, ScrollView } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
+import { Link, Redirect } from "expo-router";
+import { Button } from "heroui-native";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function Index() {
   const { token, isLoading } = useAuth();
@@ -14,9 +14,12 @@ export default function Index() {
     return <Redirect href="/(tabs)/home" />;
   }
 
-  // Don't show anything while loading, let splash screen handle it
   if (isLoading) {
-    return null;
+    return (
+      <View className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator size="large" color="#ff0000" />
+      </View>
+    );
   }
 
   const features = [
@@ -71,7 +74,7 @@ export default function Index() {
             </Text>
           </View>
 
-          <Text className="text-4xl md:text-5xl font-bold text-center text-foreground leading-tight">
+          <Text className="text-4xl md:text-5xl font-bold text-center text-foreground leading-loose">
             Discover Myanmar&apos;s{"\n"}
             <Text className="text-primary">Musical Heritage</Text>
           </Text>
@@ -82,7 +85,7 @@ export default function Index() {
           </Text>
 
           <View className="flex-row gap-4 mt-10 w-full">
-            <Link href="/login" asChild>
+            <Link href="/(auth)/login" asChild>
               <Button variant="primary" size="lg" className="flex-1 rounded-sm">
                 <Ionicons name="play" size={20} color="white" />
                 <Button.Label className="font-bold ml-2">
@@ -187,7 +190,7 @@ export default function Index() {
           <Text className="text-muted-foreground text-center mb-10 px-8">
             Join thousands of users enjoying Myanmar music on Myanify.
           </Text>
-          <Link href="/login" asChild>
+          <Link href="/(auth)/login" asChild>
             <Button className="w-full rounded-sm bg-primary h-14">
               <Button.Label className="text-primary-foreground font-bold">
                 Get Started Now

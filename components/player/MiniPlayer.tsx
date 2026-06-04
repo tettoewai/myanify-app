@@ -5,7 +5,7 @@ import { useLikeSong } from "@/hooks/useLikeSong";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter, useSegments } from "expo-router";
+import { type Href, useRouter, useSegments } from "expo-router";
 import React, { useEffect } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import Animated, {
@@ -36,9 +36,10 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
   const { isLikedSong, toggleLike } = useLikeSong();
   const animationDuration = 500;
 
-  // Hide mini player when on player page or if no session
+  // Hide mini player when on the full player route or if no session
   const segmentsArray = segments as string[];
-  const isOnPlayerPage = segmentsArray.includes("player");
+  const isOnPlayerPage =
+    segmentsArray.includes("player") || segmentsArray.includes("song");
   const isAuthPage = segmentsArray.includes("(auth)");
   const isLandingPage =
     segmentsArray.length === 0 ||
@@ -141,7 +142,7 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
 
         <TouchableOpacity
           onPress={() => {
-            router.push("/player");
+            router.push(`/song/${currentSong.id}` as Href);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
           activeOpacity={0.9}
@@ -150,7 +151,8 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
           {/* Album Art */}
           <View className="w-14 h-14 rounded-lg overflow-hidden mr-3">
             <Image
-              source={{ uri: getCoverUrl() }}
+              uri={getCoverUrl()}
+              variant="album"
               className="w-full h-full"
               contentFit="cover"
             />

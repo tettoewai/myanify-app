@@ -1,3 +1,4 @@
+import { SignInPrompt } from "@/components/auth/SignInPrompt";
 import { StyledSafeAreaView as SafeAreaView } from "@/components/styled";
 import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
@@ -30,7 +31,7 @@ interface UserProfile {
 }
 
 export default function Setting() {
-  const { signOut, token } = useAuth();
+  const { signOut, token, isLoading: authLoading } = useAuth();
   const { theme } = useUniwind();
   const queryClient = useQueryClient();
   const { currentSong } = usePlayer();
@@ -137,6 +138,28 @@ export default function Setting() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+  if (authLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator size="large" color="#ff0000" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!token) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
+        <SignInPrompt
+          title="Sign in to view settings"
+          description="Manage your profile, theme, and account preferences after signing in."
+          compact
+        />
+      </SafeAreaView>
+    );
+  }
+
   if (isLoading) {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
@@ -158,6 +181,12 @@ export default function Setting() {
           <Text className="text-muted-foreground text-center mt-2">
             {error?.message || "Please try again later"}
           </Text>
+          <TouchableOpacity
+            onPress={handleSignOut}
+            className="mt-6 px-6 py-3 bg-primary rounded-lg"
+          >
+            <Text className="text-white font-semibold">Sign in again</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );

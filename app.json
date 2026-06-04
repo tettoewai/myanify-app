@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "myanify",
+    "name": "Myanify",
     "slug": "myanify-app",
     "version": "1.0.1",
     "orientation": "portrait",
@@ -10,7 +10,24 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tlab.myanify"
+      "bundleIdentifier": "com.tlab.myanify",
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.739457800060-s319n61if27pmd7lhffoqhatpi2k7asb"
+            ]
+          }
+        ]
+      },
+      "plugins": [
+        [
+          "@react-native-google-signin/google-signin",
+          {
+            "iosUrlScheme": "com.googleusercontent.apps.739457800060-s319n61if27pmd7lhffoqhatpi2k7asb"
+          }
+        ]
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -55,8 +72,7 @@
         "androidClientId": "739457800060-e53a1s0m3576udu1o5id670plh18aab7.apps.googleusercontent.com",
         "iosClientId": "739457800060-s319n61if27pmd7lhffoqhatpi2k7asb.apps.googleusercontent.com",
         "webClientId": "739457800060-eq2ieghufl3vmdr96se7tofi9h67gr6i.apps.googleusercontent.com"
-      },
-      "apiUrl": "https://myanify.vercel.app/api"
+      }
     }
   }
 }

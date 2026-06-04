@@ -3,6 +3,14 @@ export interface LyricLine {
   text: string;
 }
 
+export type QueueItemSource = "user-queue" | "playlist" | "radio" | "autoplay";
+
+export interface QueueItem {
+  qid: string;
+  song: Song;
+  source: QueueItemSource;
+}
+
 export interface Song {
   id: string;
   title: string;
@@ -17,6 +25,8 @@ export interface Song {
   };
   duration: number;
   audioUrl: string;
+  /** Proxied stream URL (`/api/audio/stream`) with byte-range support. */
+  playbackUrl?: string;
   genre?: string;
   lyrics?: LyricLine[];
   isPremium?: boolean;

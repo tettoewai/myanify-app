@@ -30,6 +30,14 @@ export default function RootLayout() {
             animation: "slide_from_bottom",
           }}
         />
+        <Stack.Screen
+          name="song/[id]"
+          options={{
+            headerShown: false,
+            presentation: "fullScreenModal",
+            animation: "slide_from_bottom",
+          }}
+        />
         <Stack.Screen name="artist/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="liked-songs" options={{ headerShown: false }} />
         <Stack.Screen name="playlist/[id]" options={{ headerShown: false }} />

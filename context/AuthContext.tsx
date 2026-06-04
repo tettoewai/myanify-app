@@ -1,16 +1,24 @@
+import { authStorage } from "@/lib/auth-storage";
+import {
+  isProtectedRoute,
+  notifyUnauthorized,
+  setUnauthorizedHandler,
+} from "@/lib/auth-session";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter, useSegments } from "expo-router";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
-  ReactNode,
+  type ReactNode,
 } from "react";
-import { authStorage } from "@/lib/auth-storage";
-import { useRouter, useSegments } from "expo-router";
 
 interface AuthContextType {
   token: string | null;
   isLoading: boolean;
+  isAuthenticated: boolean;
   signIn: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -22,25 +30,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const segments = useSegments();
   const router = useRouter();
+  const queryClient = useQueryClient();
+
+  const clearSession = useCallback(async () => {
+    await authStorage.removeToken();
+    setToken(null);
+    queryClient.clear();
+  }, [queryClient]);
 
   useEffect(() => {
     loadToken();
   }, []);
 
   useEffect(() => {
+    setUnauthorizedHandler(() => {
+      void (async () => {
+        await clearSession();
+        router.replace("/");
+      })();
+    });
+
+    return () => setUnauthorizedHandler(null);
+  }, [clearSession, router]);
+
+  useEffect(() => {
     if (isLoading) return;
 
-    const inAuthGroup = segments[0] === "(auth)";
-    const inTabsGroup = segments[0] === "(tabs)";
+    const segmentList = segments as string[];
+    const inAuthGroup = segmentList[0] === "(auth)";
 
-    if (!token && inTabsGroup) {
-      // Redirect to landing page if not signed in and trying to access protected routes
+    if (!token && isProtectedRoute(segmentList)) {
       router.replace("/");
-    } else if (token && inAuthGroup) {
-      // Redirect to home if signed in and trying to access auth routes
+      return;
+    }
+
+    if (token && inAuthGroup) {
       router.replace("/(tabs)/home");
     }
-  }, [token, segments, isLoading]);
+  }, [token, segments, isLoading, router]);
 
   async function loadToken() {
     try {
@@ -48,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(storedToken);
     } catch (e) {
       console.error("Failed to load token", e);
+      setToken(null);
     } finally {
       setIsLoading(false);
     }
@@ -56,16 +84,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (newToken: string) => {
     await authStorage.setToken(newToken);
     setToken(newToken);
+    router.replace("/(tabs)/home");
   };
 
   const signOut = async () => {
-    await authStorage.removeToken();
-    setToken(null);
+    await clearSession();
     router.replace("/");
   };
 
   return (
-    <AuthContext.Provider value={{ token, isLoading, signIn, signOut }}>
+    <AuthContext.Provider
+      value={{
+        token,
+        isLoading,
+        isAuthenticated: !!token,
+        signIn,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

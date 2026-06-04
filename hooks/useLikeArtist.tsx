@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
+import { Artist } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import { useToast } from "heroui-native";
-import { Artist } from "@/lib/types";
-import { useAuth } from "@/context/AuthContext";
 
 export const useLikeArtist = () => {
   const { toast } = useToast();
@@ -32,7 +32,6 @@ export const useLikeArtist = () => {
       });
     },
     onError: (error) => {
-      console.log("Error liking artist", error);
       toast.show({
         label: "Error liking artist",
         variant: "danger",

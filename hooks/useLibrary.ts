@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
+import { formatSongFromApi } from "@/lib/song-format";
 import { Artist, Playlist, Song } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 
@@ -10,6 +11,7 @@ export const useLibrary = () => {
   const {
     data: likedSongsData,
     isLoading: isLoadingSongs,
+    isRefetching: isRefetchingSongs,
     refetch: refetchSongs,
   } = useQuery({
     queryKey: ["liked-songs"],
@@ -23,6 +25,7 @@ export const useLibrary = () => {
   const {
     data: likedArtistsData,
     isLoading: isLoadingArtists,
+    isRefetching: isRefetchingArtists,
     refetch: refetchArtists,
   } = useQuery({
     queryKey: ["liked-artists"],
@@ -36,6 +39,7 @@ export const useLibrary = () => {
   const {
     data: playlistsData,
     isLoading: isLoadingPlaylists,
+    isRefetching: isRefetchingPlaylists,
     refetch: refetchPlaylists,
   } = useQuery({
     queryKey: ["playlists"],
@@ -98,32 +102,8 @@ export const useLibrary = () => {
     },
   });
 
-  // Transform songs to match our Song type
-  const transformSong = (song: any): Song => ({
-    id: song.id,
-    title: song.title,
-    coverUrl: song.coverUrl || song.album?.coverUrl || "",
-    albumCoverUrl: song.album?.coverUrl || song.coverUrl || null,
-    artists: song.artists || [],
-    artist:
-      song.artists?.map((a: any) => a.artist?.name || a.name).join(", ") || "",
-    album: song.album
-      ? {
-          id: song.album.id,
-          name: song.album.name,
-          coverUrl: song.album.coverUrl || "",
-        }
-      : undefined,
-    duration: song.duration || 0,
-    audioUrl: song.audioUrl || "",
-    genre: song.genre?.name || "",
-    lyrics:
-      song.lyrics?.map((l: any) => ({ time: l.time, text: l.text })) || [],
-    isPremium: song.isPremium || false,
-  });
-
   const likedSongs: Song[] = likedSongsData?.length
-    ? likedSongsData?.map(transformSong)
+    ? likedSongsData.map(formatSongFromApi)
     : [];
   const likedArtists: Artist[] = likedArtistsData || [];
   const playlists: Playlist[] = playlistsData || [];
@@ -133,6 +113,8 @@ export const useLibrary = () => {
     likedArtists,
     playlists,
     isLoading: isLoadingSongs || isLoadingArtists || isLoadingPlaylists,
+    isRefetching:
+      isRefetchingSongs || isRefetchingArtists || isRefetchingPlaylists,
     createPlaylist: createPlaylistMutation.mutateAsync,
     isCreatingPlaylist: createPlaylistMutation.isPending,
     updatePlaylist: (
@@ -145,10 +127,12 @@ export const useLibrary = () => {
     removeFromPlaylist: (playlistId: string, songId: string) =>
       removeFromPlaylistMutation.mutateAsync({ playlistId, songId }),
     isRemovingFromPlaylist: removeFromPlaylistMutation.isPending,
-    refetch: () => {
-      refetchSongs();
-      refetchArtists();
-      refetchPlaylists();
+    refetch: async () => {
+      await Promise.all([
+        refetchSongs(),
+        refetchArtists(),
+        refetchPlaylists(),
+      ]);
     },
   };
 };

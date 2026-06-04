@@ -1,17 +1,20 @@
+import { SignInPrompt } from "@/components/auth/SignInPrompt";
 import {
   StyledImage as Image,
   StyledSafeAreaView as SafeAreaView,
 } from "@/components/styled";
 import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
+import { SongActionSheet } from "@/components/SongActionSheet";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { apiClient } from "@/lib/api";
+import { formatSongFromApi } from "@/lib/song-format";
 import { Artist, Genre, Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { Card, TextField } from "heroui-native";
+import { Card, Input, TextField } from "heroui-native";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -30,9 +33,10 @@ const { width } = Dimensions.get("window");
 const COLUMN_WIDTH = (width - 48) / 2;
 
 export default function Search() {
-  const { playSong, setQueue } = usePlayer();
+  const { playSong } = usePlayer();
+  const [actionSong, setActionSong] = useState<Song | null>(null);
   const { isLikedSong, toggleLike } = useLikeSong();
-  const { token } = useAuth();
+  const { token, isLoading: authLoading } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const router = useRouter();
@@ -68,36 +72,10 @@ export default function Search() {
   const rawSongs: any[] = songsData?.data || [];
   const artists: Artist[] = artistsData?.data || [];
 
-  // Transform songs to match our Song type
-  const songs: Song[] = rawSongs.map((song: any) => ({
-    id: song.id,
-    title: song.title,
-    coverUrl: song.coverUrl || song.album?.coverUrl || "",
-    albumCoverUrl: song.album?.coverUrl || song.coverUrl || null,
-    artists: song.artists || [],
-    artist:
-      song.artists?.map((a: any) => a.artist?.name || a.name).join(", ") || "",
-    album: song.album
-      ? {
-          id: song.album.id,
-          name: song.album.name,
-          coverUrl: song.album.coverUrl || "",
-        }
-      : undefined,
-    duration: song.duration || 0,
-    audioUrl: song.audioUrl || "",
-    genre: song.genre?.name || "",
-    lyrics:
-      song.lyrics?.map((l: any) => ({ time: l.time, text: l.text })) || [],
-    isPremium: song.isPremium || false,
-  }));
+  const songs: Song[] = rawSongs.map(formatSongFromApi);
 
   const handlePlaySong = (song: Song) => {
-    // Set queue if not already set
-    if (songs.length > 0) {
-      setQueue(songs);
-    }
-    playSong(song);
+    void playSong(song);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -113,7 +91,8 @@ export default function Search() {
       }}
     >
       <Image
-        source={{ uri: item.imageUrl || "https://via.placeholder.com/150" }}
+        uri={item.imageUrl}
+        variant="artist"
         className="w-full h-full absolute"
         contentFit="cover"
       />
@@ -125,6 +104,28 @@ export default function Search() {
     </Card>
   );
 
+  if (authLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator size="large" color="#ff0000" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!token) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
+        <SignInPrompt
+          title="Sign in to search"
+          description="Find artists, songs, and genres across the Myanify catalog."
+          compact
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
       <View className="px-4 pt-4">
@@ -133,7 +134,7 @@ export default function Search() {
         {/* Search Bar */}
         <TextField className="mb-6">
           <View className="w-full flex-row items-center">
-            <TextField.Input
+            <Input
               placeholder="What do you want to listen to?"
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -208,17 +209,14 @@ export default function Search() {
                             params: { id: artist.id },
                           });
                           Haptics.impactAsync(
-                            Haptics.ImpactFeedbackStyle.Light
+                            Haptics.ImpactFeedbackStyle.Light,
                           );
                         }}
                         activeOpacity={0.7}
                       >
                         <Image
-                          source={{
-                            uri:
-                              artist.imageUrl ||
-                              "https://via.placeholder.com/100",
-                          }}
+                          uri={artist.imageUrl}
+                          variant="artist"
                           className="w-[100px] h-[100px] rounded-[50px]"
                           contentFit="cover"
                         />
@@ -251,7 +249,8 @@ export default function Search() {
                 >
                   <Card className="flex-row items-center mb-4 p-2 bg-[#1a1a1a]">
                     <Image
-                      source={{ uri: song.coverUrl || song.album?.coverUrl }}
+                      uri={song.coverUrl || song.album?.coverUrl}
+                      variant="album"
                       className="w-[50px] h-[50px] rounded-[4px]"
                       contentFit="cover"
                     />

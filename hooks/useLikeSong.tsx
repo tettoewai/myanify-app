@@ -1,9 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api";
-import { Ionicons } from "@expo/vector-icons";
-import { useToast } from "heroui-native";
-import { Song } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
+import { apiClient } from "@/lib/api";
+import { Song } from "@/lib/types";
+import { Ionicons } from "@expo/vector-icons";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "heroui-native";
+import { useCallback, useMemo } from "react";
+
+const getLikedSongsArray = (response: any): Song[] => response?.data || [];
 
 export const useLikeSong = () => {
   const { toast } = useToast();
@@ -14,76 +17,86 @@ export const useLikeSong = () => {
     queryKey: ["liked-songs"],
     queryFn: () => apiClient.get("/liked-songs"),
     enabled: !!token,
+    staleTime: 5 * 60 * 1000,
   });
 
-  const likedSongs: Song[] = likedSongsResponse?.data || [];
+  const likedSongs = useMemo(
+    () => getLikedSongsArray(likedSongsResponse),
+    [likedSongsResponse],
+  );
 
-  const likeSongMutation = useMutation({
-    mutationFn: (songId: string) => {
-      return apiClient.post("/liked-songs", {
-        songId,
+  const isLikedSong = useCallback(
+    (songId: string) => likedSongs.some((song) => song.id === songId),
+    [likedSongs],
+  );
+
+  const likeMutation = useMutation({
+    mutationFn: (song: Song) =>
+      apiClient.post("/liked-songs", { songId: song.id }),
+    onMutate: async (newSong) => {
+      await queryClient.cancelQueries({ queryKey: ["liked-songs"] });
+      const previousLikedSongs = queryClient.getQueryData(["liked-songs"]);
+      queryClient.setQueryData(["liked-songs"], (old: any) => {
+        const currentSongs = getLikedSongsArray(old);
+        if (currentSongs.some((s) => s.id === newSong.id)) return old;
+        return { ...old, data: [newSong, ...currentSongs] };
       });
+      return { previousLikedSongs };
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["liked-songs"] });
+    onError: (error, song, context) => {
+      queryClient.setQueryData(["liked-songs"], context?.previousLikedSongs);
       toast.show({
-        variant: "success",
-        label: "Added to Liked Songs",
-        icon: <Ionicons name="heart" size={24} color="white" />,
-      });
-    },
-    onError: (error: any) => {
-      console.log("Error liking song", error);
-      toast.show({
-        label: error.message || "Error liking song",
+        label: error?.message || "Failed to like song. Please try again.",
         variant: "danger",
         icon: <Ionicons name="close-circle" size={24} color="white" />,
       });
     },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["liked-songs"] });
+    },
   });
 
-  const unlikeSongMutation = useMutation({
-    mutationFn: (songId: string) => {
-      return apiClient.fetch(`/liked-songs?songId=${songId}`, {
-        method: "DELETE",
+  const unlikeMutation = useMutation({
+    mutationFn: (song: Song) =>
+      apiClient.delete(`/liked-songs?songId=${song.id}`),
+    onMutate: async (songToRemove) => {
+      await queryClient.cancelQueries({ queryKey: ["liked-songs"] });
+      const previousLikedSongs = queryClient.getQueryData(["liked-songs"]);
+      queryClient.setQueryData(["liked-songs"], (old: any) => {
+        const currentSongs = getLikedSongsArray(old);
+        const filtered = currentSongs.filter((s) => s.id !== songToRemove.id);
+        return { ...old, data: filtered };
       });
+      return { previousLikedSongs };
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["liked-songs"] });
+    onError: (error, song, context) => {
+      queryClient.setQueryData(["liked-songs"], context?.previousLikedSongs);
       toast.show({
-        variant: "success",
-        label: "Removed from Liked Songs",
-        icon: <Ionicons name="heart-outline" size={24} color="white" />,
-      });
-    },
-    onError: (error: any) => {
-      console.log("Error unliking song", error);
-      toast.show({
-        label: error.message || "Error unliking song",
+        label: error?.message || "Failed to unlike song. Please try again.",
         variant: "danger",
         icon: <Ionicons name="close-circle" size={24} color="white" />,
       });
     },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["liked-songs"] });
+    },
   });
 
-  const isLikedSong = (songId: string) => {
-    return likedSongs.some((song) => song.id === songId);
-  };
-
-  const toggleLike = async (songId: string) => {
-    if (isLikedSong(songId)) {
-      return unlikeSongMutation.mutateAsync(songId);
-    } else {
-      return likeSongMutation.mutateAsync(songId);
-    }
-  };
+  const toggleLike = useCallback(
+    async (song: Song) => {
+      if (isLikedSong(song.id)) {
+        return unlikeMutation.mutateAsync(song);
+      } else {
+        return likeMutation.mutateAsync(song);
+      }
+    },
+    [isLikedSong, likeMutation, unlikeMutation],
+  );
 
   return {
     likedSongs,
     isLikedSong,
     toggleLike,
     isLoading,
-    isLiking: likeSongMutation.isPending,
-    isUnliking: unlikeSongMutation.isPending,
   };
 };

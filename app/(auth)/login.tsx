@@ -8,9 +8,10 @@ import {
 } from "@react-native-google-signin/google-signin";
 import { useMutation } from "@tanstack/react-query";
 import Constants from "expo-constants";
-import { Button, Spinner, TextField, useToast } from "heroui-native";
+import { Button, Input, Spinner, useToast } from "heroui-native";
+import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { withUniwind } from "uniwind";
 
 const StyledIonicons = withUniwind(Ionicons);
@@ -19,7 +20,7 @@ const IOS_CLIENT_ID = Constants.expoConfig?.extra?.google?.iosClientId;
 const WEB_CLIENT_ID = Constants.expoConfig?.extra?.google?.webClientId;
 
 export default function Login() {
-  const { signIn } = useAuth();
+  const { signIn, token, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,7 +29,7 @@ export default function Login() {
   useEffect(() => {
     if (!WEB_CLIENT_ID) {
       console.warn(
-        "Google Sign-In: WEB_CLIENT_ID is not defined in expoConfig.extra.google"
+        "Google Sign-In: WEB_CLIENT_ID is not defined in expoConfig.extra.google",
       );
     }
     GoogleSignin.configure({
@@ -59,7 +60,6 @@ export default function Login() {
       await signIn(token);
     },
     onError: (error: any) => {
-      console.log("Login response:", error);
       let errorMessage = error.message || "Something went wrong";
 
       if (
@@ -129,7 +129,8 @@ export default function Login() {
         message: error.message,
         nativeStackAndroid: error.nativeStackAndroid,
         webClientId: WEB_CLIENT_ID ? "✅ Set" : "❌ Missing",
-        troubleshooting: "https://react-native-google-signin.github.io/docs/troubleshooting",
+        troubleshooting:
+          "https://react-native-google-signin.github.io/docs/troubleshooting",
       });
 
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
@@ -143,7 +144,6 @@ export default function Login() {
           description: "Google Play Services not available or outdated",
         });
       } else if (error.code === "10" || error.code === 10) {
-        // DEVELOPER_ERROR (code 10) - not exported in statusCodes but error code is "10"
         toast.show({
           variant: "danger",
           label: "Google Sign-In Configuration Error",
@@ -162,6 +162,18 @@ export default function Login() {
 
   const isInvalidEmail =
     email !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  if (authLoading) {
+    return (
+      <View className="flex-1 justify-center items-center bg-background">
+        <ActivityIndicator size="large" color="#ff0000" />
+      </View>
+    );
+  }
+
+  if (token) {
+    return <Redirect href="/(tabs)/home" />;
+  }
 
   const handleLogin = async () => {
     if (!email || !password || isInvalidEmail) {
@@ -190,7 +202,7 @@ export default function Login() {
         <View className="mt-4">
           <Button
             variant="tertiary"
-            pressableFeedbackVariant="ripple"
+            feedbackVariant="scale-ripple"
             className="w-full rounded-sm"
             size="sm"
             onPress={handleGoogleLogin}
@@ -220,18 +232,22 @@ export default function Login() {
           </View>
         </View>
         <View className="gap-4 mt-2">
-          <TextField isRequired isInvalid={isInvalidEmail}>
-            <TextField.Label>Email Address</TextField.Label>
-            <View className="w-full flex-row items-center">
-              <TextField.Input
+          {/* Email TextField - Using props directly instead of compound components */}
+          <View className="gap-1">
+            <Text className="text-sm font-medium text-foreground ml-1">
+              Email Address <Text className="text-danger">*</Text>
+            </Text>
+            <View className="w-full flex-row items-center relative">
+              <Input
                 placeholder="Enter your email"
                 placeholderTextColor="rgb(107, 114, 128, 0.5)"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={email}
                 onChangeText={setEmail}
-                className="flex-1 px-10 rounded-sm"
+                className="flex-1 pl-10 pr-4 rounded-sm"
                 editable={!loginMutation.isPending}
+                isInvalid={isInvalidEmail}
               />
               <StyledIonicons
                 name="mail-outline"
@@ -240,19 +256,24 @@ export default function Login() {
                 pointerEvents="none"
               />
             </View>
-            <TextField.ErrorMessage>
-              Please enter a valid email address
-            </TextField.ErrorMessage>
-          </TextField>
+            {isInvalidEmail && (
+              <Text className="text-xs text-danger ml-1">
+                Please enter a valid email address
+              </Text>
+            )}
+          </View>
 
-          <TextField isRequired>
-            <TextField.Label>Password</TextField.Label>
-            <View className="w-full flex-row items-center">
-              <TextField.Input
+          {/* Password TextField - Using props directly instead of compound components */}
+          <View className="gap-1">
+            <Text className="text-sm font-medium text-foreground ml-1">
+              Password <Text className="text-danger">*</Text>
+            </Text>
+            <View className="w-full flex-row items-center relative">
+              <Input
                 placeholder="Enter password"
                 placeholderTextColor="rgb(107, 114, 128, 0.5)"
                 secureTextEntry={!isVisible}
-                className="flex-1 px-10 rounded-sm"
+                className="flex-1 pl-10 pr-12 rounded-sm"
                 value={password}
                 onChangeText={setPassword}
                 editable={!loginMutation.isPending}
@@ -275,10 +296,10 @@ export default function Login() {
                 />
               </Pressable>
             </View>
-          </TextField>
+          </View>
 
           <Button
-            pressableFeedbackVariant="ripple"
+            feedbackVariant="scale-ripple"
             className="mt-4 rounded-sm w-full"
             variant="primary"
             onPress={handleLogin}
