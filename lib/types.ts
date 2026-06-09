@@ -16,7 +16,8 @@ export interface Song {
   title: string;
   coverUrl: string;
   albumCoverUrl?: string | null;
-  artists: { artist: { name: string } }[];
+  artistImageUrl?: string | null;
+  artists: { artist: { name: string; imageUrl?: string | null } }[];
   artist?: string; // Comma-separated artist names for display
   album?: {
     id?: string;
@@ -45,6 +46,11 @@ export interface Album {
   id: string;
   name: string;
   coverUrl: string;
+  type?: string | null;
+  releaseDate?: string | null;
+  description?: string | null;
+  songs?: any[];
+  _count?: { songs: number };
 }
 
 export interface Playlist {
@@ -60,6 +66,7 @@ export interface Playlist {
 
 export interface Genre {
   id: string;
+  slug?: string;
   name: string;
   imageUrl: string;
   description?: string;

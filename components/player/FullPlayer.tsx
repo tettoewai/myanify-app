@@ -2,6 +2,7 @@ import { StyledImage as Image } from "@/components/styled";
 import { usePlayer } from "@/context/PlayerContext";
 import { UpNextSheet } from "@/components/player/UpNextSheet";
 import { useLikeSong } from "@/hooks/useLikeSong";
+import { getSongCoverUrl } from "@/lib/song-cover";
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import * as Haptics from "expo-haptics";
@@ -112,7 +113,7 @@ const LyricItem = memo(({ lyric, isActive, fontSize }: LyricItemProps) => {
         return (
           <Text
             key={`${lineIndex}-${line.slice(0, 12)}`}
-            className="text-center pt-2"
+            className="text-center pt-2 leading-loose"
             allowFontScaling={false}
             style={{
               color: isPrimaryLine ? primaryColor : secondaryColor,
@@ -141,6 +142,7 @@ interface LyricsListProps {
   currentSong: any;
   coverUrl: string;
   artistName: string;
+  isLoadingLyrics?: boolean;
 }
 
 const LyricsList = memo(
@@ -152,6 +154,7 @@ const LyricsList = memo(
     currentSong,
     coverUrl,
     artistName,
+    isLoadingLyrics = false,
   }: LyricsListProps) => {
     const flatListRef = useRef<FlatList>(null);
     const [isUserScrolling, setIsUserScrolling] = useState(false);
@@ -220,34 +223,47 @@ const LyricsList = memo(
           </View>
         </TouchableOpacity>
 
-        <FlatList
-          ref={flatListRef}
-          style={{ flex: 1 }}
-          data={lyrics}
-          keyExtractor={(_, index) => index.toString()}
-          renderItem={({ item, index }) => (
-            <LyricItem
-              lyric={item}
-              isActive={index === activeIndex}
-              fontSize={fontSize}
-            />
-          )}
-          showsVerticalScrollIndicator={false}
-          clipToPadding={false}
-          onScrollBeginDrag={onScrollBeginDrag}
-          onScrollEndDrag={onScrollEndDrag}
-          onMomentumScrollEnd={onScrollEndDrag}
-          contentContainerStyle={{
-            paddingTop: LYRICS_SCROLL_PADDING_TOP,
-            paddingBottom: LYRICS_SCROLL_PADDING_BOTTOM,
-          }}
-          onScrollToIndexFailed={(info) => {
-            flatListRef.current?.scrollToOffset({
-              offset: info.averageItemLength * info.index,
-              animated: true,
-            });
-          }}
-        />
+        {isLoadingLyrics ? (
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator size="large" color="#ff0000" />
+            <Text className="text-neutral-400 mt-3">Loading lyrics...</Text>
+          </View>
+        ) : lyrics.length === 0 ? (
+          <View className="flex-1 items-center justify-center px-8">
+            <Text className="text-neutral-400 text-center">
+              No synchronized lyrics available for this song
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            style={{ flex: 1 }}
+            data={lyrics}
+            keyExtractor={(_, index) => index.toString()}
+            renderItem={({ item, index }) => (
+              <LyricItem
+                lyric={item}
+                isActive={index === activeIndex}
+                fontSize={fontSize}
+              />
+            )}
+            showsVerticalScrollIndicator={false}
+            clipToPadding={false}
+            onScrollBeginDrag={onScrollBeginDrag}
+            onScrollEndDrag={onScrollEndDrag}
+            onMomentumScrollEnd={onScrollEndDrag}
+            contentContainerStyle={{
+              paddingTop: LYRICS_SCROLL_PADDING_TOP,
+              paddingBottom: LYRICS_SCROLL_PADDING_BOTTOM,
+            }}
+            onScrollToIndexFailed={(info) => {
+              flatListRef.current?.scrollToOffset({
+                offset: info.averageItemLength * info.index,
+                animated: true,
+              });
+            }}
+          />
+        )}
       </View>
     );
   },
@@ -259,6 +275,9 @@ export function FullPlayer() {
   const router = useRouter();
   const {
     currentSong,
+    currentSongLyrics,
+    isLoadingLyrics,
+    requestCurrentSongLyrics,
     isPlaying,
     currentTime: contextCurrentTime,
     duration,
@@ -382,10 +401,13 @@ export function FullPlayer() {
     }),
   ).current;
 
-  const lyrics = useMemo(
-    () => currentSong?.lyrics ?? [],
-    [currentSong?.lyrics],
-  );
+  useEffect(() => {
+    if (currentSong) {
+      requestCurrentSongLyrics();
+    }
+  }, [currentSong?.id, requestCurrentSongLyrics]);
+
+  const lyrics = useMemo(() => currentSongLyrics ?? [], [currentSongLyrics]);
 
   const formatTime = useCallback((seconds: number) => {
     if (!isFinite(seconds) || seconds < 0) return "0:00";
@@ -402,14 +424,10 @@ export function FullPlayer() {
     return "Unknown Artist";
   }, [currentSong]);
 
-  const getCoverUrl = useCallback(() => {
-    return (
-      currentSong?.albumCoverUrl ||
-      currentSong?.album?.coverUrl ||
-      currentSong?.coverUrl ||
-      ""
-    );
-  }, [currentSong]);
+  const coverUrl = useMemo(
+    () => getSongCoverUrl(currentSong) ?? "",
+    [currentSong],
+  );
 
   const activeIndex = useMemo(() => {
     if (!lyrics.length) return -1;
@@ -485,11 +503,11 @@ export function FullPlayer() {
   }, [router]);
 
   const handleLikeToggle = useCallback(() => {
-    if (currentSong?.id) {
-      toggleLike(currentSong.id);
+    if (currentSong) {
+      toggleLike(currentSong);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-  }, [currentSong?.id, toggleLike]);
+  }, [currentSong, toggleLike]);
 
   if (!currentSong) {
     return (
@@ -630,7 +648,7 @@ export function FullPlayer() {
                     }}
                   >
                     <Image
-                      uri={getCoverUrl()}
+                      uri={coverUrl}
                       variant="album"
                       className="w-full h-full"
                       contentFit="cover"
@@ -654,7 +672,7 @@ export function FullPlayer() {
                   </Text>
                   {upNext[0] && (
                     <Text
-                      className="text-neutral-500 text-xs text-center mt-1"
+                      className="text-neutral-500 text-xs text-center mt-1 leading-loose"
                       numberOfLines={1}
                     >
                       Up next: {upNext[0].song.title}
@@ -695,8 +713,9 @@ export function FullPlayer() {
                   fontSize={lyricsFontSize}
                   onClose={() => setShowLyrics(false)}
                   currentSong={currentSong}
-                  coverUrl={getCoverUrl()}
+                  coverUrl={coverUrl}
                   artistName={getArtistName()}
+                  isLoadingLyrics={isLoadingLyrics}
                 />
 
                 {/* Lyrics Controls */}

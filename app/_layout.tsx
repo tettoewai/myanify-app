@@ -6,7 +6,7 @@ import "../global.css";
 
 export default function RootLayout() {
   const segments = useSegments();
-  const isAtBottom = ["artist", "liked-songs"].some((s) =>
+  const isAtBottom = ["artist", "album", "liked-songs", "see-all"].some((s) =>
     (segments as string[]).includes(s)
   );
   return (
@@ -39,6 +39,8 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen name="artist/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="album/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="see-all/[section]" options={{ headerShown: false }} />
         <Stack.Screen name="liked-songs" options={{ headerShown: false }} />
         <Stack.Screen name="playlist/[id]" options={{ headerShown: false }} />
       </Stack>

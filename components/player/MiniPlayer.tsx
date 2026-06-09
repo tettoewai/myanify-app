@@ -2,6 +2,7 @@ import { StyledImage as Image } from "@/components/styled";
 import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
+import { getSongCoverUrl } from "@/lib/song-cover";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -47,7 +48,11 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
 
   // Determine if miniplayer should be visible
   const shouldBeVisible =
-    !!token && !!currentSong && !isOnPlayerPage && !isAuthPage && !isLandingPage;
+    !!token &&
+    !!currentSong &&
+    !isOnPlayerPage &&
+    !isAuthPage &&
+    !isLandingPage;
 
   const TAB_BAR_HEIGHT = 60 + insets.bottom;
   const targetBottom =
@@ -58,11 +63,16 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
   const bottomShared = useSharedValue(targetBottom);
 
   useEffect(() => {
-    bottomShared.value = withTiming(targetBottom, {
-      duration: animationDuration,
-      easing: Easing.bezier(0.4, 0.0, 0.2, 1),
-    });
-  }, [targetBottom, bottomShared]);
+    if (shouldBeVisible) {
+      opacity.value = withTiming(1, { duration: animationDuration });
+      bottomShared.value = withTiming(targetBottom, {
+        duration: animationDuration,
+      });
+    } else {
+      opacity.value = withTiming(0, { duration: animationDuration });
+      bottomShared.value = withTiming(-100, { duration: animationDuration }); // hide below screen
+    }
+  }, [shouldBeVisible, targetBottom]);
 
   useEffect(() => {
     if (shouldBeVisible) {
@@ -94,14 +104,6 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
       return currentSong.artists.map((a) => a.artist.name).join(", ");
     }
     return "Unknown Artist";
-  };
-
-  const getCoverUrl = () => {
-    return (
-      currentSong?.albumCoverUrl ||
-      currentSong?.album?.coverUrl ||
-      currentSong?.coverUrl
-    );
   };
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -151,7 +153,7 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
           {/* Album Art */}
           <View className="w-14 h-14 rounded-lg overflow-hidden mr-3">
             <Image
-              uri={getCoverUrl()}
+              uri={getSongCoverUrl(currentSong)}
               variant="album"
               className="w-full h-full"
               contentFit="cover"
@@ -161,15 +163,17 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
           {/* Song Info */}
           <View className="flex-1 mr-3">
             <Text
-              className={`${isDark ? "text-white" : "text-foreground"
-                } text-base font-semibold mb-1`}
+              className={`${
+                isDark ? "text-white" : "text-foreground"
+              } text-base font-semibold mb-1 leading-loose`}
               numberOfLines={1}
             >
               {currentSong.title}
             </Text>
             <Text
-              className={`${isDark ? "text-[#a3a3a3]" : "text-muted-foreground"
-                } text-sm`}
+              className={`${
+                isDark ? "text-[#a3a3a3]" : "text-muted-foreground"
+              } text-sm leading-loose`}
               numberOfLines={1}
             >
               {getArtistName()}
@@ -181,7 +185,7 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
             <TouchableOpacity
               onPress={(e) => {
                 e.stopPropagation();
-                toggleLike(currentSong.id);
+                toggleLike(currentSong);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }}
               className="p-2"

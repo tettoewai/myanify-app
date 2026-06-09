@@ -4,7 +4,6 @@ import {
   StyledSafeAreaView as SafeAreaView,
 } from "@/components/styled";
 import { usePlayer } from "@/context/PlayerContext";
-import { SongActionSheet } from "@/components/SongActionSheet";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
@@ -12,14 +11,14 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { Spinner } from "heroui-native";
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   FlatList,
+  Modal,
+  Pressable,
   Text,
   TouchableOpacity,
   View,
-  Modal,
-  Pressable,
 } from "react-native";
 import { withUniwind } from "uniwind";
 
@@ -51,7 +50,7 @@ function LikedSongsScreen() {
         return songs.sort((a, b) => a.title.localeCompare(b.title));
       case "artist":
         return songs.sort((a, b) =>
-          (a.artist || "").localeCompare(b.artist || "")
+          (a.artist || "").localeCompare(b.artist || ""),
         );
       case "recent":
       default:
@@ -112,7 +111,7 @@ function LikedSongsScreen() {
         {/* Song Info */}
         <View className="flex-1">
           <Text
-            className={`font-bold text-base ${
+            className={`font-bold text-base leading-loose ${
               isPlaying ? "text-primary" : "text-foreground"
             }`}
             numberOfLines={1}
@@ -120,7 +119,7 @@ function LikedSongsScreen() {
             {item.title}
           </Text>
           <Text
-            className="text-muted-foreground text-sm mt-0.5"
+            className="text-muted-foreground text-sm mt-0.5 leading-loose"
             numberOfLines={1}
           >
             {item.artist || "Unknown Artist"}
@@ -130,7 +129,7 @@ function LikedSongsScreen() {
         {/* Like Button */}
         <TouchableOpacity
           onPress={() => {
-            toggleLike(item.id);
+            toggleLike(item);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           }}
           className="p-2 ml-2"
@@ -253,9 +252,7 @@ function LikedSongsScreen() {
                 {sortedSongs.length > 0 && (
                   <View className="flex-row w-full gap-3">
                     <TouchableOpacity
-                      onPress={() =>
-                        handlePlaySong(sortedSongs[0])
-                      }
+                      onPress={() => handlePlaySong(sortedSongs[0])}
                       className="flex-1 bg-primary h-14 rounded-full flex-row items-center justify-center shadow-lg"
                     >
                       <StyledIonicons
@@ -294,8 +291,8 @@ function LikedSongsScreen() {
                     {sortBy === "recent"
                       ? "Recently Added"
                       : sortBy === "title"
-                      ? "Title (A-Z)"
-                      : "Artist (A-Z)"}
+                        ? "Title (A-Z)"
+                        : "Artist (A-Z)"}
                   </Text>
                 </Text>
               </View>

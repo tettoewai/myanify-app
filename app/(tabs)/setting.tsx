@@ -1,5 +1,8 @@
 import { SignInPrompt } from "@/components/auth/SignInPrompt";
-import { StyledSafeAreaView as SafeAreaView } from "@/components/styled";
+import {
+  StyledSafeAreaView as SafeAreaView,
+  StyledImage,
+} from "@/components/styled";
 import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
 import { apiClient } from "@/lib/api";
@@ -61,7 +64,7 @@ export default function Setting() {
     onConfirm?: () => void,
     confirmText = "OK",
     cancelText?: string,
-    isDestructive = false
+    isDestructive = false,
   ) => {
     setDialogConfig({
       isOpen: true,
@@ -129,7 +132,7 @@ export default function Setting() {
       },
       "Sign Out",
       "Cancel",
-      true
+      true,
     );
   };
 
@@ -222,18 +225,22 @@ export default function Setting() {
             </View>
 
             <View className="flex-row items-center mb-4">
-              <View className="w-16 h-16 rounded-full bg-primary/20 items-center justify-center mr-4">
+              <View className="w-16 h-16 rounded-full bg-primary/20 items-center justify-center mr-4 overflow-hidden">
                 {profile.avatarUrl ? (
-                  <Ionicons name="person" size={32} color="#ff0000" />
+                  <StyledImage
+                    source={{ uri: profile.avatarUrl }}
+                    className="w-full h-full"
+                    contentFit="cover"
+                  />
                 ) : (
                   <Ionicons name="person" size={32} color="#ff0000" />
                 )}
               </View>
               <View className="flex-1">
-                <Text className="text-foreground font-semibold text-lg">
+                <Text className="text-foreground font-semibold text-lg leading-loose">
                   {profile.name || "User"}
                 </Text>
-                <Text className="text-muted-foreground text-sm">
+                <Text className="text-muted-foreground text-sm leading-loose">
                   {profile.email}
                 </Text>
                 {profile.isPremium && (
@@ -391,7 +398,7 @@ export default function Setting() {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   showDialog(
                     "Premium",
-                    "Upgrade to Premium for ad-free listening and more features!"
+                    "Upgrade to Premium for ad-free listening and more features!",
                   );
                 }}
                 className="flex-row items-center justify-between py-3 border-b border-border"
@@ -417,7 +424,7 @@ export default function Setting() {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   showDialog(
                     "Change Password",
-                    "Please use the web app to change your password."
+                    "Please use the web app to change your password.",
                   );
                 }}
                 className="flex-row items-center justify-between py-3 border-b border-border"
@@ -442,7 +449,7 @@ export default function Setting() {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 showDialog(
                   "Privacy Settings",
-                  "Manage your privacy preferences here."
+                  "Manage your privacy preferences here.",
                 );
               }}
               className="flex-row items-center justify-between py-3"
@@ -473,7 +480,7 @@ export default function Setting() {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 showDialog(
                   "Help & Support",
-                  "Contact us at support@myanify.com"
+                  "Contact us at support@myanify.com",
                 );
               }}
               className="flex-row items-center justify-between py-3 border-b border-border"
@@ -497,7 +504,7 @@ export default function Setting() {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 showDialog(
                   "Terms & Privacy",
-                  "Read our terms of service and privacy policy."
+                  "Read our terms of service and privacy policy.",
                 );
               }}
               className="flex-row items-center justify-between py-3 border-b border-border"

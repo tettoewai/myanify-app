@@ -246,7 +246,7 @@ function PlaylistDetailsScreen() {
         </View>
         <View className="ml-3 flex-1">
           <Text
-            className={`text-base font-semibold ${
+            className={`text-base font-semibold leading-loose ${
               isCurrentSong ? "text-primary" : "text-white"
             }`}
             numberOfLines={1}
@@ -261,7 +261,10 @@ function PlaylistDetailsScreen() {
                 </Text>
               </View>
             )}
-            <Text className="text-neutral-400 text-sm flex-1" numberOfLines={1}>
+            <Text
+              className="text-neutral-400 text-sm flex-1 leading-loose"
+              numberOfLines={1}
+            >
               {item.artist}
             </Text>
           </View>
@@ -368,7 +371,7 @@ function PlaylistDetailsScreen() {
             </TouchableOpacity>
             <Animated.Text
               style={{ opacity: headerOpacity }}
-              className="text-white text-lg font-bold"
+              className="text-white text-lg font-bold leading-loose"
               numberOfLines={1}
             >
               {playlist.name}
@@ -404,7 +407,7 @@ function PlaylistDetailsScreen() {
         <View className="px-6 py-4">
           <View className="flex-row items-center mb-3">
             <Text
-              className="text-white text-5xl font-black flex-1"
+              className="text-white text-5xl font-black flex-1 leading-loose"
               numberOfLines={2}
             >
               {playlist.name}
@@ -419,7 +422,7 @@ function PlaylistDetailsScreen() {
                 size={16}
                 color="#a3a3a3"
               />
-              <Text className="text-neutral-400 text-sm ml-2 font-medium">
+              <Text className="text-neutral-400 text-sm ml-2 font-medium leading-loose">
                 Created by{" "}
                 {typeof playlist.createdBy === "string"
                   ? playlist.createdBy
@@ -509,7 +512,7 @@ function PlaylistDetailsScreen() {
                 </Text>
               </View>
               <Text
-                className="text-neutral-300 text-sm leading-6"
+                className="text-neutral-300 text-sm leading-loose"
                 numberOfLines={isDescExpanded ? undefined : 3}
               >
                 {playlist.description}

@@ -175,7 +175,7 @@ function ArtistDetailsScreen() {
         </View>
         <View className="ml-3 flex-1">
           <Text
-            className={`text-base font-semibold pt-2 ${
+            className={`text-base font-semibold pt-2 leading-loose ${
               isCurrentSong ? "text-primary" : "text-white"
             }`}
             numberOfLines={1}
@@ -190,7 +190,10 @@ function ArtistDetailsScreen() {
                 </Text>
               </View>
             )}
-            <Text className="text-neutral-400 text-sm flex-1" numberOfLines={1}>
+            <Text
+              className="text-neutral-400 text-sm flex-1 leading-loose"
+              numberOfLines={1}
+            >
               {item.artist}
             </Text>
           </View>
@@ -285,7 +288,7 @@ function ArtistDetailsScreen() {
             </TouchableOpacity>
             <Animated.Text
               style={{ opacity: headerOpacity }}
-              className="text-white text-lg font-bold"
+              className="text-white text-lg font-bold leading-loose"
               numberOfLines={1}
             >
               {artist.name}
@@ -331,7 +334,7 @@ function ArtistDetailsScreen() {
                 size={16}
                 color="#a3a3a3"
               />
-              <Text className="text-neutral-400 text-sm ml-2 font-medium">
+              <Text className="text-neutral-400 text-sm ml-2 font-medium leading-loose">
                 {Number(artist.monthlyListeners).toLocaleString()} monthly
                 listeners
               </Text>
@@ -432,7 +435,7 @@ function ArtistDetailsScreen() {
                 </Text>
               </View>
               <Text
-                className="text-neutral-300 text-sm leading-6"
+                className="text-neutral-300 text-sm leading-loose"
                 numberOfLines={isBioExpanded ? undefined : 3}
               >
                 {artist.bio}

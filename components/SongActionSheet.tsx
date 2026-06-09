@@ -3,13 +3,7 @@ import type { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React from "react";
-import {
-  Modal,
-  Pressable,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface SongActionSheetProps {
@@ -24,13 +18,8 @@ export function SongActionSheet({
   onClose,
 }: SongActionSheetProps) {
   const insets = useSafeAreaInsets();
-  const {
-    playSong,
-    playNextInQueue,
-    addToQueue,
-    startRadio,
-    isSongQueued,
-  } = usePlayer();
+  const { playSong, playNextInQueue, addToQueue, startRadio, isSongQueued } =
+    usePlayer();
 
   if (!song) return null;
 
@@ -72,7 +61,12 @@ export function SongActionSheet({
   ];
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
       <Pressable className="flex-1 bg-black/50" onPress={onClose}>
         <View className="flex-1" />
       </Pressable>
@@ -81,12 +75,14 @@ export function SongActionSheet({
         style={{ paddingBottom: insets.bottom + 16 }}
       >
         <View className="w-10 h-1 bg-muted rounded-full self-center mb-4" />
-        <Text className="text-lg font-semibold text-foreground mb-1 px-2">
+        <Text className="text-lg font-semibold text-foreground mb-1 px-2 leading-loose">
           {song.title}
         </Text>
-        <Text className="text-sm text-muted-foreground mb-4 px-2" numberOfLines={1}>
-          {song.artist ||
-            song.artists?.map((a) => a.artist.name).join(", ")}
+        <Text
+          className="text-sm text-muted-foreground mb-4 px-2 leading-loose"
+          numberOfLines={1}
+        >
+          {song.artist || song.artists?.map((a) => a.artist.name).join(", ")}
         </Text>
         {actions.map((action) => (
           <TouchableOpacity

@@ -36,6 +36,7 @@ export default function Library() {
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isInputFocused, setIsInputFocused] = useState(false);
 
   const {
     likedSongs,
@@ -54,14 +55,14 @@ export default function Library() {
   const filteredPlaylists = useMemo(() => {
     if (!searchQuery) return playlists;
     return playlists.filter((playlist) =>
-      playlist.name.toLowerCase().includes(searchQuery.toLowerCase())
+      playlist.name.toLowerCase().includes(searchQuery.toLowerCase()),
     );
   }, [playlists, searchQuery]);
 
   const filteredArtists = useMemo(() => {
     if (!searchQuery) return likedArtists;
     return likedArtists.filter((artist) =>
-      artist.name.toLowerCase().includes(searchQuery.toLowerCase())
+      artist.name.toLowerCase().includes(searchQuery.toLowerCase()),
     );
   }, [likedArtists, searchQuery]);
 
@@ -179,12 +180,15 @@ export default function Library() {
             contentFit="cover"
           />
           <Text
-            className="text-foreground font-bold text-base mt-2"
+            className="text-foreground font-bold text-base mt-2 leading-loose"
             numberOfLines={1}
           >
             {playlist.name}
           </Text>
-          <Text className="text-muted-foreground text-sm" numberOfLines={1}>
+          <Text
+            className="text-muted-foreground text-sm leading-loose"
+            numberOfLines={1}
+          >
             {playlist.songs?.length || 0} songs
           </Text>
         </TouchableOpacity>
@@ -206,10 +210,10 @@ export default function Library() {
           contentFit="cover"
         />
         <View className="flex-1">
-          <Text className="text-foreground font-bold text-lg">
+          <Text className="text-foreground font-bold text-lg leading-loose">
             {playlist.name}
           </Text>
-          <Text className="text-muted-foreground text-sm">
+          <Text className="text-muted-foreground text-sm leading-loose">
             Playlist • {playlist.songs?.length || 0} songs
           </Text>
         </View>
@@ -240,7 +244,7 @@ export default function Library() {
             contentFit="cover"
           />
           <Text
-            className="text-foreground font-bold text-base mt-2 text-center"
+            className="text-foreground font-bold text-base mt-2 text-center leading-loose"
             numberOfLines={1}
           >
             {item.name}
@@ -270,7 +274,9 @@ export default function Library() {
           contentFit="cover"
         />
         <View className="flex-1">
-          <Text className="text-foreground font-bold text-lg">{item.name}</Text>
+          <Text className="text-foreground font-bold text-lg leading-loose">
+            {item.name}
+          </Text>
           <Text className="text-muted-foreground text-sm">Artist</Text>
         </View>
         <StyledIonicons
@@ -518,10 +524,11 @@ export default function Library() {
               setActiveTab("playlists");
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }}
-            className={`flex-1 px-4 py-3 rounded-xl ${activeTab === "playlists"
-              ? "bg-primary shadow"
-              : "bg-card border border-border"
-              }`}
+            className={`flex-1 px-4 py-3 rounded-xl ${
+              activeTab === "playlists"
+                ? "bg-primary shadow"
+                : "bg-card border border-border"
+            }`}
           >
             <View className="flex-row items-center justify-center">
               <StyledIonicons
@@ -532,8 +539,9 @@ export default function Library() {
                 }
               />
               <Text
-                className={`font-semibold ml-2 ${activeTab === "playlists" ? "text-white" : "text-foreground"
-                  }`}
+                className={`font-semibold ml-2 ${
+                  activeTab === "playlists" ? "text-white" : "text-foreground"
+                }`}
               >
                 Playlists
               </Text>
@@ -544,10 +552,11 @@ export default function Library() {
               setActiveTab("artists");
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }}
-            className={`flex-1 px-4 py-3 rounded-xl ${activeTab === "artists"
-              ? "bg-primary shadow"
-              : "bg-card border border-border"
-              }`}
+            className={`flex-1 px-4 py-3 rounded-xl ${
+              activeTab === "artists"
+                ? "bg-primary shadow"
+                : "bg-card border border-border"
+            }`}
           >
             <View className="flex-row items-center justify-center">
               <StyledIonicons
@@ -558,8 +567,9 @@ export default function Library() {
                 }
               />
               <Text
-                className={`font-semibold ml-2 ${activeTab === "artists" ? "text-white" : "text-foreground"
-                  }`}
+                className={`font-semibold ml-2 ${
+                  activeTab === "artists" ? "text-white" : "text-foreground"
+                }`}
               >
                 Artists
               </Text>
@@ -614,7 +624,11 @@ export default function Library() {
               {/* Input Field */}
               <View className="mb-6">
                 <TextInput
-                  className="w-full bg-card border-2 border-border focus:border-primary rounded-xl px-5 py-4 text-foreground text-lg"
+                  onFocus={() => setIsInputFocused(true)}
+                  onBlur={() => setIsInputFocused(false)}
+                  className={`w-full bg-card border-2 rounded-xl px-5 py-4 text-foreground text-lg ${
+                    isInputFocused ? "border-primary" : "border-border"
+                  }`}
                   placeholder="My awesome playlist"
                   placeholderTextColor="#737373"
                   value={newPlaylistName}
@@ -641,10 +655,11 @@ export default function Library() {
                 <TouchableOpacity
                   onPress={handleCreatePlaylist}
                   disabled={isCreatingPlaylist || !newPlaylistName.trim()}
-                  className={`flex-1 px-6 py-4 rounded-xl shadow ${isCreatingPlaylist || !newPlaylistName.trim()
-                    ? "bg-muted-foreground/30"
-                    : "bg-primary"
-                    }`}
+                  className={`flex-1 px-6 py-4 rounded-xl shadow ${
+                    isCreatingPlaylist || !newPlaylistName.trim()
+                      ? "bg-muted-foreground/30"
+                      : "bg-primary"
+                  }`}
                 >
                   {isCreatingPlaylist ? (
                     <Spinner color="white" size="sm" />

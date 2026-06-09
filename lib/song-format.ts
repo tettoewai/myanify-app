@@ -1,15 +1,48 @@
 import { getPlaybackUrl } from "@/lib/playback-url";
-import type { Song } from "@/lib/types";
+import type { LyricLine, Song } from "@/lib/types";
+
+/** Parse lyrics from API — undefined when the response omitted them. */
+export function formatLyricsFromApi(lyrics: any): LyricLine[] | undefined {
+  if (lyrics === undefined) return undefined;
+  if (!Array.isArray(lyrics)) return [];
+
+  if (
+    lyrics.length > 0 &&
+    "time" in lyrics[0] &&
+    "text" in lyrics[0]
+  ) {
+    return lyrics.map((line: any) => ({
+      time: line.time ?? 0,
+      text: line.text ?? "",
+    }));
+  }
+
+  const linesRow = lyrics[0];
+  if (linesRow?.lines && Array.isArray(linesRow.lines)) {
+    return linesRow.lines.map((line: any) => ({
+      time: line.time ?? 0,
+      text: line.text ?? "",
+    }));
+  }
+
+  return [];
+}
 
 /** Normalize API song payloads for the mobile player. */
 export function formatSongFromApi(song: any): Song {
   const audioUrl = song.audioUrl || "";
+
+  const artistImageUrl =
+    song.artists
+      ?.map((a: any) => a.artist?.imageUrl)
+      .find((url: string | null | undefined) => Boolean(url)) ?? null;
 
   return {
     id: song.id,
     title: song.title,
     coverUrl: song.coverUrl || song.album?.coverUrl || "",
     albumCoverUrl: song.album?.coverUrl || song.coverUrl || null,
+    artistImageUrl,
     artists: song.artists || [],
     artist:
       song.artists?.map((a: any) => a.artist?.name || a.name).join(", ") || "",
@@ -24,8 +57,7 @@ export function formatSongFromApi(song: any): Song {
     audioUrl,
     playbackUrl: song.playbackUrl || getPlaybackUrl(audioUrl),
     genre: song.genre?.name || song.genre || "",
-    lyrics:
-      song.lyrics?.map((l: any) => ({ time: l.time, text: l.text })) || [],
+    lyrics: formatLyricsFromApi(song.lyrics),
     isPremium: song.isPremium || false,
   };
 }

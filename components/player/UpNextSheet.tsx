@@ -1,5 +1,6 @@
 import { StyledImage as Image } from "@/components/styled";
 import { usePlayer } from "@/context/PlayerContext";
+import { getSongCoverUrl } from "@/lib/song-cover";
 import type { QueueItem } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
@@ -13,14 +14,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-function getCoverUrl(song: QueueItem["song"]) {
-  return (
-    song.albumCoverUrl ||
-    song.album?.coverUrl ||
-    song.coverUrl
-  );
-}
 
 function getArtistName(song: QueueItem["song"]) {
   if (song.artist) return song.artist;
@@ -55,18 +48,26 @@ export function UpNextSheet({ visible, onClose }: UpNextSheetProps) {
   );
 
   const renderItem = (item: QueueItem, canRemove: boolean) => (
-    <View
-      key={item.qid}
-      className="flex-row items-center gap-3 py-2.5 px-2"
-    >
+    <View key={item.qid} className="flex-row items-center gap-3 py-2.5 px-2">
       <View className="w-12 h-12 rounded-lg overflow-hidden">
-        <Image uri={getCoverUrl(item.song)} variant="album" className="w-full h-full" contentFit="cover" />
+        <Image
+          uri={getSongCoverUrl(item.song)}
+          variant="album"
+          className="w-full h-full"
+          contentFit="cover"
+        />
       </View>
       <View className="flex-1 min-w-0">
-        <Text className="text-foreground font-medium" numberOfLines={1}>
+        <Text
+          className="text-foreground font-medium leading-loose"
+          numberOfLines={1}
+        >
           {item.song.title}
         </Text>
-        <Text className="text-muted-foreground text-sm" numberOfLines={1}>
+        <Text
+          className="text-muted-foreground text-sm leading-loose"
+          numberOfLines={1}
+        >
           {getArtistName(item.song)}
           {(item.source === "radio" || item.source === "autoplay") && (
             <Text className="text-primary"> · Suggested</Text>
@@ -82,8 +83,13 @@ export function UpNextSheet({ visible, onClose }: UpNextSheetProps) {
   );
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable className="flex-1 bg-black/50" onPress={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable className="flex-1 bg-red/50" onPress={onClose}>
         <View className="flex-1" />
       </Pressable>
       <View
@@ -96,7 +102,10 @@ export function UpNextSheet({ visible, onClose }: UpNextSheetProps) {
             <Ionicons name="list" size={22} color="#d4a574" />
             <Text className="text-xl font-bold text-foreground">Up Next</Text>
           </View>
-          <TouchableOpacity onPress={() => clearQueue()} disabled={upNext.length === 0}>
+          <TouchableOpacity
+            onPress={() => clearQueue()}
+            disabled={upNext.length === 0}
+          >
             <Text className="text-sm text-muted-foreground">Clear</Text>
           </TouchableOpacity>
         </View>
@@ -123,17 +132,23 @@ export function UpNextSheet({ visible, onClose }: UpNextSheetProps) {
               <View className="flex-row items-center gap-3 p-2 rounded-xl bg-primary/15">
                 <View className="w-12 h-12 rounded-lg overflow-hidden">
                   <Image
-                    uri={getCoverUrl(currentSong)}
+                    uri={getSongCoverUrl(currentSong)}
                     variant="album"
                     className="w-full h-full"
                     contentFit="cover"
                   />
                 </View>
                 <View className="flex-1">
-                  <Text className="font-medium text-foreground" numberOfLines={1}>
+                  <Text
+                    className="font-medium text-foreground leading-loose"
+                    numberOfLines={1}
+                  >
                     {currentSong.title}
                   </Text>
-                  <Text className="text-sm text-muted-foreground" numberOfLines={1}>
+                  <Text
+                    className="text-sm text-muted-foreground leading-loose"
+                    numberOfLines={1}
+                  >
                     {getArtistName(currentSong)}
                   </Text>
                 </View>
@@ -162,7 +177,11 @@ export function UpNextSheet({ visible, onClose }: UpNextSheetProps) {
           {upNext.length === 0 && (
             <Text className="text-center text-muted-foreground py-8">
               {currentSong
-                ? "Nothing queued. Turn on Smart Radio for endless playback."
+                ? radioMode
+                  ? isFetchingRadio
+                    ? "Finding similar songs for Smart Radio…"
+                    : "Smart Radio is on. Similar songs will play next."
+                  : "Nothing queued. Turn on Smart Radio for endless playback."
                 : "Queue is empty."}
             </Text>
           )}

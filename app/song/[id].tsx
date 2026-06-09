@@ -8,7 +8,7 @@ import { formatSongFromApi } from "@/lib/song-format";
 import type { Song } from "@/lib/types";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 
 export default function SongPage() {
@@ -25,7 +25,11 @@ function SongPlayerScreen() {
   const { token } = useAuth();
   const { currentSong, playSong } = usePlayer();
 
-  const shouldLoadSong = !!id && currentSong?.id !== id;
+  // Compute once on mount: only fetch if the requested song isn't already
+  // playing. Using useState (not a derived variable) so this never flips back
+  // to true when the user skips to the next song inside the player — that
+  // would re-enable the query, re-fetch the original song, and restart it.
+  const [shouldLoadSong] = useState(() => !!id && currentSong?.id !== id);
 
   const {
     data: fetchedSong,
@@ -34,7 +38,7 @@ function SongPlayerScreen() {
   } = useQuery({
     queryKey: ["song", id],
     queryFn: async () => {
-      const response = await apiClient.get(`/songs/${id}`);
+      const response = await apiClient.get(`/songs/${id}?include=lyrics`);
       const song = response?.data ?? response;
       return formatSongFromApi(song) as Song;
     },
@@ -45,14 +49,16 @@ function SongPlayerScreen() {
     if (fetchedSong && currentSong?.id !== fetchedSong.id) {
       void playSong(fetchedSong);
     }
-  }, [currentSong?.id, fetchedSong, playSong]);
+    // Intentionally omit currentSong?.id: we only want to fire when
+    // fetchedSong arrives, not every time the user skips to a different song.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchedSong, playSong]);
 
-  const isReady = useMemo(
-    () => !!currentSong && (!id || currentSong.id === id),
-    [currentSong, id],
-  );
+  // Ready as soon as we have any current song. After next/prev, currentSong.id
+  // will differ from the route id — that's fine, the player just keeps playing.
+  const isReady = !!currentSong;
   const isStartingFetchedSong =
-    !!fetchedSong && currentSong?.id !== fetchedSong.id;
+    shouldLoadSong && !!fetchedSong && currentSong?.id !== fetchedSong.id;
 
   if (!isReady && (isLoading || isStartingFetchedSong)) {
     return (
