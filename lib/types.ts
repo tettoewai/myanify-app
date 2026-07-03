@@ -46,6 +46,7 @@ export interface Album {
   id: string;
   name: string;
   coverUrl: string;
+  artistImageUrl?: string | null;
   type?: string | null;
   releaseDate?: string | null;
   description?: string | null;

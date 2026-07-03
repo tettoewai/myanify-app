@@ -56,23 +56,11 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
 
   const TAB_BAR_HEIGHT = 60 + insets.bottom;
   const targetBottom =
-    bottomOffset !== undefined ? bottomOffset : TAB_BAR_HEIGHT;
+    bottomOffset !== undefined ? bottomOffset + insets.bottom : TAB_BAR_HEIGHT;
 
   const opacity = useSharedValue(shouldBeVisible ? 1 : 0);
   const translateY = useSharedValue(shouldBeVisible ? 0 : 100);
   const bottomShared = useSharedValue(targetBottom);
-
-  useEffect(() => {
-    if (shouldBeVisible) {
-      opacity.value = withTiming(1, { duration: animationDuration });
-      bottomShared.value = withTiming(targetBottom, {
-        duration: animationDuration,
-      });
-    } else {
-      opacity.value = withTiming(0, { duration: animationDuration });
-      bottomShared.value = withTiming(-100, { duration: animationDuration }); // hide below screen
-    }
-  }, [shouldBeVisible, targetBottom]);
 
   useEffect(() => {
     if (shouldBeVisible) {
@@ -84,6 +72,9 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
         duration: animationDuration,
         easing: Easing.bezier(0.4, 0.0, 0.2, 1),
       });
+      bottomShared.value = withTiming(targetBottom, {
+        duration: animationDuration,
+      });
     } else {
       opacity.value = withTiming(0, {
         duration: animationDuration,
@@ -93,8 +84,11 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
         duration: animationDuration,
         easing: Easing.bezier(0.4, 0.0, 0.2, 1),
       });
+      bottomShared.value = withTiming(-100, {
+        duration: animationDuration,
+      });
     }
-  }, [shouldBeVisible, opacity, translateY]);
+  }, [shouldBeVisible, targetBottom]);
 
   const progress = duration > 0 ? currentTime / duration : 0;
 

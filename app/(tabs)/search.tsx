@@ -10,6 +10,7 @@ import { useLikeSong } from "@/hooks/useLikeSong";
 import { useSearch } from "@/hooks/useSearch";
 import { apiClient } from "@/lib/api";
 import { formatSongFromApi } from "@/lib/song-format";
+import { getSongCoverUrl } from "@/lib/song-cover";
 import { Artist, Genre, Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -196,8 +197,7 @@ export default function Search() {
         </Text>
         <Image
           uri={
-            song.coverUrl ||
-            song.album?.coverUrl ||
+            getSongCoverUrl(song) ??
             "https://placehold.co/50x50/333/ff0000?text=No+Cover"
           }
           variant="album"

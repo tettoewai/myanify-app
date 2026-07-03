@@ -6,7 +6,7 @@ import "../global.css";
 
 export default function RootLayout() {
   const segments = useSegments();
-  const isAtBottom = ["artist", "album", "liked-songs", "see-all"].some((s) =>
+  const isAtBottom = ["artist", "album", "liked-songs", "see-all", "playlist"].some((s) =>
     (segments as string[]).includes(s)
   );
   return (

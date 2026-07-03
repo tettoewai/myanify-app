@@ -9,12 +9,14 @@ import { useLikeArtist } from "@/hooks/useLikeArtist";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { apiClient } from "@/lib/api";
 import { formatSongFromApi } from "@/lib/song-format";
+import { getSongCoverUrl } from "@/lib/song-cover";
 import { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, { useMemo, useRef } from "react";
 import {
   ActivityIndicator,
@@ -79,6 +81,7 @@ function ArtistDetailsScreen() {
   const [actionSong, setActionSong] = React.useState<Song | null>(null);
 
   const { isLikedSong, toggleLike } = useLikeSong();
+  const insets = useSafeAreaInsets();
 
   const [isBioExpanded, setIsBioExpanded] = React.useState(false);
 
@@ -162,7 +165,7 @@ function ArtistDetailsScreen() {
         </Text>
         <View className="relative">
           <Image
-            uri={item.coverUrl}
+            uri={getSongCoverUrl(item) ?? ""}
             variant="album"
             className="w-14 h-14 rounded-lg"
             contentFit="cover"
@@ -241,7 +244,7 @@ function ArtistDetailsScreen() {
   });
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-background" style={{ paddingBottom: insets.bottom }}>
       <StatusBar barStyle="light-content" />
 
       {/* Animated Header Background */}

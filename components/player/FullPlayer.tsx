@@ -1,8 +1,10 @@
 import { StyledImage as Image } from "@/components/styled";
 import { usePlayer } from "@/context/PlayerContext";
 import { UpNextSheet } from "@/components/player/UpNextSheet";
+import { EnhancedLyrics } from "@/components/player/EnhancedLyrics";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { getSongCoverUrl } from "@/lib/song-cover";
+import { findLyricIndexByTime } from "@/hooks/useSyncedLyrics";
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import * as Haptics from "expo-haptics";
@@ -20,7 +22,7 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  FlatList,
+  ImageBackground,
   PanResponder,
   Text,
   TouchableOpacity,
@@ -35,241 +37,12 @@ const StyledAnimatedView = withUniwind(Animated.View);
 
 const { width, height } = Dimensions.get("window");
 
-/** Vertical padding so active lines can center without clipping Myanmar glyphs at the top. */
-const LYRICS_SCROLL_PADDING_TOP = Math.round(height * 0.22);
-const LYRICS_SCROLL_PADDING_BOTTOM = Math.round(height * 0.32);
-
-// Lead time to make lyrics feel more on-beat (in seconds)
-const SYNC_LEAD_SECONDS = 0.12;
-
 function splitLyricLines(text: string): string[] {
   return text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 }
-
-/** Same nominal size for Myanmar and English; line height scales with font size. */
-function getLyricTypography(fontSize: "small" | "medium" | "large") {
-  switch (fontSize) {
-    case "medium":
-      return { size: 15 };
-    case "large":
-      return { size: 17 };
-    case "small":
-    default:
-      return { size: 14 };
-  }
-}
-
-function lyricLineHeight(fontSizePx: number) {
-  return Math.round(fontSizePx * 1.35);
-}
-
-// Binary search to find the correct lyric index for a given time
-function findLyricIndexByTime(
-  lyrics: { text: string; time: number }[],
-  time: number,
-): number {
-  if (!lyrics.length) return -1;
-
-  const times = lyrics.map((l) => l.time);
-  let lo = 0;
-  let hi = times.length - 1;
-
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    if (times[mid] === time) return mid;
-    if (times[mid] < time) {
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-
-  return Math.max(0, lo - 1);
-}
-
-interface LyricItemProps {
-  lyric: { text: string; time: number };
-  isActive: boolean;
-  fontSize: "small" | "medium" | "large";
-}
-
-const LyricItem = memo(({ lyric, isActive, fontSize }: LyricItemProps) => {
-  const lines = splitLyricLines(lyric.text);
-  const { size: fontSizePx } = getLyricTypography(fontSize);
-  const lineHeight = lyricLineHeight(fontSizePx);
-  const primaryColor = isActive ? "#ef4444" : "rgba(255,255,255,0.4)";
-  const secondaryColor = isActive
-    ? "rgba(255,255,255,0.75)"
-    : "rgba(255,255,255,0.28)";
-
-  return (
-    <View className="mb-5 px-4" style={{ overflow: "visible" }}>
-      {lines.map((line, lineIndex) => {
-        const isPrimaryLine = lineIndex === 0;
-
-        return (
-          <Text
-            key={`${lineIndex}-${line.slice(0, 12)}`}
-            className="text-center pt-2 leading-loose"
-            allowFontScaling={false}
-            style={{
-              color: isPrimaryLine ? primaryColor : secondaryColor,
-              fontSize: fontSizePx,
-              lineHeight,
-              fontWeight: isActive ? (isPrimaryLine ? "600" : "400") : "400",
-              marginTop: lineIndex > 0 ? 4 : 0,
-              includeFontPadding: false,
-            }}
-          >
-            {line}
-          </Text>
-        );
-      })}
-    </View>
-  );
-});
-
-LyricItem.displayName = "LyricItem";
-
-interface LyricsListProps {
-  lyrics: { text: string; time: number }[];
-  activeIndex: number;
-  fontSize: "small" | "medium" | "large";
-  onClose: () => void;
-  currentSong: any;
-  coverUrl: string;
-  artistName: string;
-  isLoadingLyrics?: boolean;
-}
-
-const LyricsList = memo(
-  ({
-    lyrics,
-    activeIndex,
-    fontSize,
-    onClose,
-    currentSong,
-    coverUrl,
-    artistName,
-    isLoadingLyrics = false,
-  }: LyricsListProps) => {
-    const flatListRef = useRef<FlatList>(null);
-    const [isUserScrolling, setIsUserScrolling] = useState(false);
-    const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    useEffect(() => {
-      if (!isUserScrolling && flatListRef.current && activeIndex !== -1) {
-        flatListRef.current.scrollToIndex({
-          index: activeIndex,
-          animated: true,
-          viewPosition: 0.5,
-        });
-      }
-    }, [activeIndex, isUserScrolling]);
-
-    useEffect(() => {
-      return () => {
-        if (scrollTimeoutRef.current) {
-          clearTimeout(scrollTimeoutRef.current);
-        }
-      };
-    }, []);
-
-    const onScrollBeginDrag = useCallback(() => {
-      setIsUserScrolling(true);
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-    }, []);
-
-    const onScrollEndDrag = useCallback(() => {
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-      scrollTimeoutRef.current = setTimeout(() => {
-        setIsUserScrolling(false);
-      }, 3000);
-    }, []);
-
-    return (
-      <View className="flex-1 px-6">
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={onClose}
-          className="flex-row items-center mb-4"
-        >
-          <Image
-            uri={coverUrl}
-            variant="album"
-            className="w-14 h-14 rounded-lg"
-            contentFit="cover"
-          />
-          <View className="ml-3 flex-1">
-            <Text
-              className="text-white text-base font-semibold leading-loose pt-2"
-              numberOfLines={2}
-              allowFontScaling={false}
-              style={{ lineHeight: 22, includeFontPadding: false }}
-            >
-              {currentSong?.title || "Unknown Song"}
-            </Text>
-            <Text
-              className="text-neutral-400 text-sm leading-loose pt-2"
-              numberOfLines={1}
-              allowFontScaling={false}
-              style={{ lineHeight: 18, includeFontPadding: false }}
-            >
-              {artistName}
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        {isLoadingLyrics ? (
-          <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="large" color="#ff0000" />
-            <Text className="text-neutral-400 mt-3">Loading lyrics...</Text>
-          </View>
-        ) : lyrics.length === 0 ? (
-          <View className="flex-1 items-center justify-center px-8">
-            <Text className="text-neutral-400 text-center">
-              No synchronized lyrics available for this song
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            style={{ flex: 1 }}
-            data={lyrics}
-            keyExtractor={(_, index) => index.toString()}
-            renderItem={({ item, index }) => (
-              <LyricItem
-                lyric={item}
-                isActive={index === activeIndex}
-                fontSize={fontSize}
-              />
-            )}
-            showsVerticalScrollIndicator={false}
-            clipToPadding={false}
-            onScrollBeginDrag={onScrollBeginDrag}
-            onScrollEndDrag={onScrollEndDrag}
-            onMomentumScrollEnd={onScrollEndDrag}
-            contentContainerStyle={{
-              paddingTop: LYRICS_SCROLL_PADDING_TOP,
-              paddingBottom: LYRICS_SCROLL_PADDING_BOTTOM,
-            }}
-            onScrollToIndexFailed={(info) => {
-              flatListRef.current?.scrollToOffset({
-                offset: info.averageItemLength * info.index,
-                animated: true,
-              });
-            }}
-          />
-        )}
-      </View>
-    );
-  },
-);
-
-LyricsList.displayName = "LyricsList";
 
 export function FullPlayer() {
   const router = useRouter();
@@ -300,9 +73,6 @@ export function FullPlayer() {
 
   const [showUpNext, setShowUpNext] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
-  const [lyricsFontSize, setLyricsFontSize] = useState<
-    "small" | "medium" | "large"
-  >("small");
   const [isSliding, setIsSliding] = useState(false);
   const [slidingValue, setSlidingValue] = useState(0);
   const [localCurrentTime, setLocalCurrentTime] = useState(0);
@@ -314,29 +84,46 @@ export function FullPlayer() {
 
   const currentTime = localCurrentTime;
 
-  // Sync local time with context time
+  // Store values in refs to avoid re-creating interval on every render
+  const durationRef = useRef(duration);
+  durationRef.current = duration;
+  const contextTimeRef = useRef(contextCurrentTime);
+  contextTimeRef.current = contextCurrentTime;
+  const baseTimeRef = useRef(contextCurrentTime);
+  const lastContextTimeRef = useRef(contextCurrentTime);
+
+  // Detect seeks: only restart interval when context time jumps significantly
+  // This uses a state counter so it triggers a single re-render + interval restart
+  const [seekTick, setSeekTick] = useState(0);
   useEffect(() => {
-    setLocalCurrentTime(contextCurrentTime);
-  }, [contextCurrentTime]);
+    const jump = Math.abs(contextCurrentTime - lastContextTimeRef.current);
+    if (jump > 2 || lastContextTimeRef.current === 0) {
+      baseTimeRef.current = contextCurrentTime;
+      setSeekTick((t) => t + 1);
+      // When paused, sync directly since the interval isn't running
+      if (!isPlaying) {
+        setLocalCurrentTime(contextCurrentTime);
+      }
+    }
+    lastContextTimeRef.current = contextCurrentTime;
+  }, [contextCurrentTime, isPlaying]);
 
   // High-frequency time updates for smooth lyrics synchronization
   useEffect(() => {
-    if (isPlaying && duration > 0) {
-      let lastUpdateTime = Date.now();
-      let baseTime = contextCurrentTime;
+    if (!isPlaying || duration <= 0) return;
 
-      const intervalId = setInterval(() => {
-        const now = Date.now();
-        const elapsed = (now - lastUpdateTime) / 1000;
-        const interpolated = baseTime + elapsed;
-        setLocalCurrentTime(Math.min(interpolated, duration));
-      }, 50);
+    const baseTime = contextTimeRef.current;
+    baseTimeRef.current = baseTime;
+    const startTime = Date.now();
 
-      return () => clearInterval(intervalId);
-    } else {
-      setLocalCurrentTime(contextCurrentTime);
-    }
-  }, [isPlaying, contextCurrentTime, duration]);
+    const intervalId = setInterval(() => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const interpolated = baseTime + elapsed;
+      setLocalCurrentTime(Math.min(interpolated, durationRef.current));
+    }, 100);
+
+    return () => clearInterval(intervalId);
+  }, [isPlaying, duration, seekTick]);
 
   // Rotation animation for album art
   useEffect(() => {
@@ -402,12 +189,27 @@ export function FullPlayer() {
   ).current;
 
   useEffect(() => {
+    console.log('🎵 FullPlayer: Song changed, currentSongLyrics:', currentSongLyrics?.length);
+
     if (currentSong) {
+      // If lyrics are already loaded, use them
+      if (currentSongLyrics !== undefined && currentSongLyrics.length > 0) {
+        console.log('✅ FullPlayer: Lyrics already loaded, no need to request');
+        return;
+      }
+
+      // If we have cached lyrics but they're empty, request anyway
+      console.log('🔄 FullPlayer: Requesting lyrics for:', currentSong.id);
       requestCurrentSongLyrics();
     }
-  }, [currentSong?.id, requestCurrentSongLyrics]);
+  }, [currentSong?.id, currentSongLyrics, requestCurrentSongLyrics]);
 
-  const lyrics = useMemo(() => currentSongLyrics ?? [], [currentSongLyrics]);
+  const lyrics = useMemo(() => {
+    if (currentSongLyrics && currentSongLyrics.length > 0) {
+      return currentSongLyrics;
+    }
+    return [];
+  }, [currentSongLyrics]);
 
   const formatTime = useCallback((seconds: number) => {
     if (!isFinite(seconds) || seconds < 0) return "0:00";
@@ -429,16 +231,13 @@ export function FullPlayer() {
     [currentSong],
   );
 
-  const activeIndex = useMemo(() => {
-    if (!lyrics.length) return -1;
-    const targetTime = Math.max(0, currentTime + SYNC_LEAD_SECONDS);
-    return findLyricIndexByTime(lyrics, targetTime);
-  }, [lyrics, currentTime]);
-
   const currentLyric = useMemo(() => {
-    if (!lyrics.length || activeIndex === -1) return null;
-    return lyrics[activeIndex];
-  }, [lyrics, activeIndex]);
+    if (!lyrics.length) return null;
+    // Use binary search from useSyncedLyrics for O(log n) lookup
+    const targetTime = Math.max(0, currentTime + 0.12);
+    const index = findLyricIndexByTime(lyrics, targetTime);
+    return index !== -1 ? lyrics[index] : null;
+  }, [lyrics, currentTime]);
 
   const toggleRepeat = useCallback(() => {
     const modes: ("off" | "all" | "one")[] = ["off", "all", "one"];
@@ -452,31 +251,6 @@ export function FullPlayer() {
     setIsShuffled(!isShuffled);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [isShuffled, setIsShuffled]);
-
-  const toggleFontSize = useCallback(() => {
-    const sizes: ("small" | "medium" | "large")[] = [
-      "small",
-      "medium",
-      "large",
-    ];
-    const currentIndex = sizes.indexOf(lyricsFontSize);
-    const nextSize = sizes[(currentIndex + 1) % sizes.length];
-    setLyricsFontSize(nextSize);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, [lyricsFontSize]);
-
-  const getIconSize = useCallback(() => {
-    switch (lyricsFontSize) {
-      case "small":
-        return 16;
-      case "medium":
-        return 22;
-      case "large":
-        return 28;
-      default:
-        return 22;
-    }
-  }, [lyricsFontSize]);
 
   const handleSeekStart = useCallback((value: number) => {
     setSlidingValue(value);
@@ -523,6 +297,124 @@ export function FullPlayer() {
     );
   }
 
+  // Render the main player content
+  const renderPlayerContent = () => (
+    <>
+      {!showLyrics ? (
+        <>
+          {/* Album Art */}
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => setShowLyrics(true)}
+            className="items-center justify-center px-10 mb-10"
+          >
+            <StyledAnimatedView
+              style={{
+                width: width * 0.8,
+                height: width * 0.8,
+                borderRadius: (width * 0.8) / 2,
+                overflow: "hidden",
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.5,
+                shadowRadius: 20,
+                elevation: 10,
+                transform: [{ rotate: rotateInterpolate }],
+              }}
+            >
+              <Image
+                uri={coverUrl}
+                variant="album"
+                className="w-full h-full"
+                contentFit="cover"
+              />
+            </StyledAnimatedView>
+          </TouchableOpacity>
+
+          {/* Song Info */}
+          <View className="px-8 mb-8 items-center">
+            <Text
+              className="text-white text-xl font-bold text-center leading-loose"
+              numberOfLines={2}
+            >
+              {currentSong.title || "Unknown Song"}
+            </Text>
+            <Text
+              className="text-neutral-400 text-base text-center leading-loose"
+              numberOfLines={1}
+            >
+              {getArtistName()}
+            </Text>
+            {upNext[0] && (
+              <Text
+                className="text-neutral-500 text-xs text-center mt-1 leading-loose"
+                numberOfLines={1}
+              >
+                Up next: {upNext[0].song.title}
+              </Text>
+            )}
+            {!upNext[0] && radioMode && (
+              <Text className="text-neutral-500 text-xs text-center mt-1">
+                Similar songs will follow
+              </Text>
+            )}
+          </View>
+
+          {/* Current Lyric Snippet */}
+          {currentLyric && (
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setShowLyrics(true)}
+              className="px-8 mb-8"
+            >
+              {splitLyricLines(currentLyric.text).map((line, i) => (
+                <Text
+                  key={i}
+                  className="text-white text-center leading-loose"
+                  allowFontScaling={false}
+                  style={{ fontSize: 14, fontWeight: "400" }}
+                >
+                  {line}
+                </Text>
+              ))}
+            </TouchableOpacity>
+          )}
+        </>
+      ) : (
+        <View className="flex-1">
+          <EnhancedLyrics
+            lyrics={lyrics}
+            currentTime={currentTime}
+            isPlaying={isPlaying}
+            currentSong={currentSong}
+            coverUrl={coverUrl}
+            artistName={getArtistName()}
+            isLoadingLyrics={isLoadingLyrics}
+            onClose={() => setShowLyrics(false)}
+            onSeek={seekTo}
+          />
+        </View>
+      )}
+    </>
+  );
+
+  // Render backdrop for lyrics mode
+  const renderBackdrop = () => {
+    if (!showLyrics || !coverUrl) return null;
+
+    return (
+      <View className="absolute inset-0 overflow-hidden" pointerEvents="none">
+        <ImageBackground
+          source={{ uri: coverUrl }}
+          className="absolute inset-0 opacity-30"
+          blurRadius={30}
+          resizeMode="cover"
+        />
+        <View className="absolute inset-0 bg-black/60" />
+      </View>
+    );
+  };
+
   return (
     <StyledAnimatedView
       className="flex-1"
@@ -534,20 +426,25 @@ export function FullPlayer() {
         colors={["#0a0a0a", "#1a1a1a", "#0a0a0a"]}
         className="flex-1"
       >
-        <View className="flex-1">
-          {/* Header — hidden in lyrics mode to leave room for Myanmar script at the top */}
-          {!showLyrics && (
-            <View
-              className="flex-row items-center justify-between px-5 pb-5"
-              {...panResponder.panHandlers}
-            >
-              <TouchableOpacity onPress={handleClose} className="p-2">
-                <StyledIonicons name="chevron-down" size={28} color="#fff" />
-              </TouchableOpacity>
-              <Text className="text-white text-base font-semibold">
-                Now Playing
-              </Text>
-              <View className="flex-row items-center">
+        {/* Backdrop for lyrics */}
+        {renderBackdrop()}
+
+        <View className="flex-1 relative">
+          {/* Header */}
+          <View
+            className="flex-row items-center justify-between px-5 pb-5"
+            {...(!showLyrics ? panResponder.panHandlers : {})}
+          >
+            <TouchableOpacity onPress={handleClose} className="p-2">
+              <StyledIonicons name="chevron-down" size={28} color="#fff" />
+            </TouchableOpacity>
+
+            <Text className="text-white text-base font-semibold">
+              {showLyrics ? "Lyrics" : "Now Playing"}
+            </Text>
+
+            <View className="flex-row items-center">
+              {!showLyrics && (
                 <TouchableOpacity
                   onPress={() => setShowUpNext(true)}
                   className="p-2 relative"
@@ -557,55 +454,32 @@ export function FullPlayer() {
                     <View className="absolute top-1 right-1 w-2 h-2 rounded-full bg-primary" />
                   )}
                 </TouchableOpacity>
-                <TouchableOpacity onPress={handleLikeToggle} className="p-2">
-                  <StyledIonicons
-                    name={
-                      currentSong?.id && isLikedSong(currentSong.id)
-                        ? "heart"
-                        : "heart-outline"
-                    }
-                    size={26}
-                    color={
-                      currentSong?.id && isLikedSong(currentSong.id)
-                        ? "#ff0000"
-                        : "#fff"
-                    }
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
-          {showLyrics && (
-            <View className="flex-row items-center justify-between px-5 pb-2">
-              <TouchableOpacity onPress={handleClose} className="p-2">
-                <StyledIonicons name="chevron-down" size={28} color="#fff" />
+              )}
+              <TouchableOpacity onPress={handleLikeToggle} className="p-2">
+                <StyledIonicons
+                  name={
+                    currentSong?.id && isLikedSong(currentSong.id)
+                      ? "heart"
+                      : "heart-outline"
+                  }
+                  size={26}
+                  color={
+                    currentSong?.id && isLikedSong(currentSong.id)
+                      ? "#ff0000"
+                      : "#fff"
+                  }
+                />
               </TouchableOpacity>
-              <View className="flex-row items-center">
-                <TouchableOpacity onPress={handleLikeToggle} className="p-2">
-                  <StyledIonicons
-                    name={
-                      currentSong?.id && isLikedSong(currentSong.id)
-                        ? "heart"
-                        : "heart-outline"
-                    }
-                    size={26}
-                    color={
-                      currentSong?.id && isLikedSong(currentSong.id)
-                        ? "#ff0000"
-                        : "#fff"
-                    }
-                  />
-                </TouchableOpacity>
+              {showLyrics && (
                 <TouchableOpacity
                   onPress={() => setShowLyrics(false)}
                   className="p-2"
                 >
                   <StyledIonicons name="musical-notes" size={24} color="#fff" />
                 </TouchableOpacity>
-              </View>
+              )}
             </View>
-          )}
+          </View>
 
           {/* Error banner */}
           {error && (
@@ -625,114 +499,7 @@ export function FullPlayer() {
           )}
 
           <View className="flex-1 justify-between pb-10">
-            {!showLyrics ? (
-              <>
-                {/* Album Art */}
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={() => setShowLyrics(true)}
-                  className="items-center justify-center px-10 mb-10"
-                >
-                  <StyledAnimatedView
-                    style={{
-                      width: width * 0.8,
-                      height: width * 0.8,
-                      borderRadius: (width * 0.8) / 2,
-                      overflow: "hidden",
-                      shadowColor: "#000",
-                      shadowOffset: { width: 0, height: 10 },
-                      shadowOpacity: 0.5,
-                      shadowRadius: 20,
-                      elevation: 10,
-                      transform: [{ rotate: rotateInterpolate }],
-                    }}
-                  >
-                    <Image
-                      uri={coverUrl}
-                      variant="album"
-                      className="w-full h-full"
-                      contentFit="cover"
-                    />
-                  </StyledAnimatedView>
-                </TouchableOpacity>
-
-                {/* Song Info */}
-                <View className="px-8 mb-8 items-center">
-                  <Text
-                    className="text-white text-xl font-bold text-center leading-loose"
-                    numberOfLines={2}
-                  >
-                    {currentSong.title || "Unknown Song"}
-                  </Text>
-                  <Text
-                    className="text-neutral-400 text-base text-center leading-loose"
-                    numberOfLines={1}
-                  >
-                    {getArtistName()}
-                  </Text>
-                  {upNext[0] && (
-                    <Text
-                      className="text-neutral-500 text-xs text-center mt-1 leading-loose"
-                      numberOfLines={1}
-                    >
-                      Up next: {upNext[0].song.title}
-                    </Text>
-                  )}
-                  {!upNext[0] && radioMode && (
-                    <Text className="text-neutral-500 text-xs text-center mt-1">
-                      Similar songs will follow
-                    </Text>
-                  )}
-                </View>
-
-                {/* Current Lyric Snippet */}
-                {currentLyric && (
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={() => setShowLyrics(true)}
-                    className="px-8 mb-8"
-                  >
-                    {splitLyricLines(currentLyric.text).map((line, i) => (
-                      <Text
-                        key={i}
-                        className="text-white text-center leading-loose"
-                        allowFontScaling={false}
-                        style={{ fontSize: 14, fontWeight: "400" }}
-                      >
-                        {line}
-                      </Text>
-                    ))}
-                  </TouchableOpacity>
-                )}
-              </>
-            ) : (
-              <View className="flex-1">
-                <LyricsList
-                  lyrics={lyrics}
-                  activeIndex={activeIndex}
-                  fontSize={lyricsFontSize}
-                  onClose={() => setShowLyrics(false)}
-                  currentSong={currentSong}
-                  coverUrl={coverUrl}
-                  artistName={getArtistName()}
-                  isLoadingLyrics={isLoadingLyrics}
-                />
-
-                {/* Lyrics Controls */}
-                <View className="absolute bottom-5 right-5 flex-row">
-                  <TouchableOpacity
-                    onPress={toggleFontSize}
-                    className="w-12 h-12 bg-white/10 rounded-xl items-center justify-center"
-                  >
-                    <StyledIonicons
-                      name="text"
-                      size={getIconSize()}
-                      color="#fff"
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
+            {renderPlayerContent()}
 
             {/* Progress Bar */}
             <View className="px-5 mb-5">
@@ -819,6 +586,7 @@ export function FullPlayer() {
           </View>
         </View>
       </StyledLinearGradient>
+
       <UpNextSheet visible={showUpNext} onClose={() => setShowUpNext(false)} />
     </StyledAnimatedView>
   );

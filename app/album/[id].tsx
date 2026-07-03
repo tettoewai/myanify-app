@@ -9,12 +9,14 @@ import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { apiClient } from "@/lib/api";
 import { formatSongFromApi } from "@/lib/song-format";
+import { getSongCoverUrl } from "@/lib/song-cover";
 import { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -82,6 +84,7 @@ function AlbumDetailsScreen() {
   } = usePlayer();
   const [actionSong, setActionSong] = useState<Song | null>(null);
   const { isLikedSong, toggleLike } = useLikeSong();
+  const insets = useSafeAreaInsets();
   const [isDescExpanded, setIsDescExpanded] = useState(false);
 
   const { data: album, isLoading: albumLoading } = useQuery({
@@ -94,6 +97,11 @@ function AlbumDetailsScreen() {
     if (!album?.songs) return [];
     return album.songs.map((item: any) => formatSongFromApi(item));
   }, [album]);
+
+  const albumArtistImageUrl = useMemo(
+    () => songs[0]?.artistImageUrl ?? null,
+    [songs],
+  );
 
   const handlePlayAll = () => {
     if (songs.length > 0) {
@@ -171,7 +179,7 @@ function AlbumDetailsScreen() {
         </Text>
         <View className="relative">
           <Image
-            uri={item.coverUrl || album.coverUrl}
+            uri={getSongCoverUrl(item) ?? album.coverUrl}
             variant="album"
             className="w-14 h-14 rounded-lg"
             contentFit="cover"
@@ -259,7 +267,7 @@ function AlbumDetailsScreen() {
   });
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-background" style={{ paddingBottom: insets.bottom }}>
       <StatusBar barStyle="light-content" />
 
       <Animated.View
@@ -276,6 +284,13 @@ function AlbumDetailsScreen() {
           <Image
             uri={album.coverUrl}
             variant="album"
+            className="w-full h-full"
+            contentFit="cover"
+          />
+        ) : albumArtistImageUrl ? (
+          <Image
+            uri={albumArtistImageUrl}
+            variant="artist"
             className="w-full h-full"
             contentFit="cover"
           />

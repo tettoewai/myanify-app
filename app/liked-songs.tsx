@@ -6,6 +6,7 @@ import {
 import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { Song } from "@/lib/types";
+import { getSongCoverUrl } from "@/lib/song-cover";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -101,7 +102,7 @@ function LikedSongsScreen() {
         {/* Album Art */}
         <View className="w-14 h-14 rounded-lg overflow-hidden mr-3 shadow">
           <Image
-            uri={item.coverUrl}
+            uri={getSongCoverUrl(item) ?? ""}
             variant="album"
             className="w-full h-full"
             contentFit="cover"

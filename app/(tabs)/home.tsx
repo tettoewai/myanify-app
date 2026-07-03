@@ -10,6 +10,7 @@ import { useLikeSong } from "@/hooks/useLikeSong";
 import { apiClient } from "@/lib/api";
 import { formatSongFromApi } from "@/lib/song-format";
 import { seeAllPath } from "@/lib/see-all-sections";
+import { getSongCoverUrl } from "@/lib/song-cover";
 import { Album, Artist, Genre, Playlist, Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -340,11 +341,10 @@ export default function Home() {
               >
                 <View className="rounded-3xl overflow-hidden shadow-lg">
                   <Image
-                    uri={
-                      featuredSong.coverUrl ||
-                      featuredSong.album?.coverUrl ||
-                      "https://placehold.co/400x400/333/ff0000?text=No+Cover"
-                    }
+                      uri={
+                        getSongCoverUrl(featuredSong) ??
+                        "https://placehold.co/400x400/333/ff0000?text=No+Cover"
+                      }
                     variant="album"
                     className="w-full h-52"
                     contentFit="cover"
@@ -440,11 +440,10 @@ export default function Home() {
                   >
                     <View className="relative">
                       <Image
-                        uri={
-                          song.coverUrl ||
-                          song.album?.coverUrl ||
-                          "https://placehold.co/160x160/333/ff0000?text=No+Cover"
-                        }
+                          uri={
+                            getSongCoverUrl(song) ??
+                            "https://placehold.co/160x160/333/ff0000?text=No+Cover"
+                          }
                         variant="album"
                         className="w-[160px] h-[160px] rounded-2xl"
                         contentFit="cover"
@@ -506,8 +505,7 @@ export default function Home() {
                   >
                     <Image
                       uri={
-                        song.coverUrl ||
-                        song.album?.coverUrl ||
+                        getSongCoverUrl(song) ??
                         "https://placehold.co/48x48/333/ff0000?text=No+Cover"
                       }
                       variant="album"
@@ -564,8 +562,7 @@ export default function Home() {
                       <View className="relative shadow-lg">
                         <Image
                           uri={
-                            song.coverUrl ||
-                            song.album?.coverUrl ||
+                            getSongCoverUrl(song) ??
                             "https://placehold.co/148x148/333/ff0000?text=No+Cover"
                           }
                           variant="album"
@@ -744,7 +741,7 @@ export default function Home() {
                     .slice(0, 4)
                     .map(
                       (ps: any) =>
-                        ps.song?.coverUrl || ps.song?.album?.coverUrl || "",
+                        getSongCoverUrl(ps.song) ?? "",
                     )
                     .filter(Boolean);
 
@@ -845,10 +842,11 @@ export default function Home() {
                   >
                     <View className="relative shadow-xl">
                       <Image
-                        uri={
-                          album.coverUrl ||
-                          "https://placehold.co/160x160/333/ff0000?text=No+Cover"
-                        }
+                          uri={
+                            album.coverUrl ||
+                            album.artistImageUrl ||
+                            "https://placehold.co/160x160/333/ff0000?text=No+Cover"
+                          }
                         variant="album"
                         className="w-[160px] h-[160px] rounded-2xl"
                         contentFit="cover"

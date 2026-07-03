@@ -13,11 +13,13 @@ import {
   type SeeAllSection,
 } from "@/lib/see-all-sections";
 import type { Album, Artist, Genre, Playlist, Song } from "@/lib/types";
+import { getSongCoverUrl } from "@/lib/song-cover";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
   Dimensions,
@@ -52,8 +54,7 @@ function getArtistNames(song: Song): string {
 
 function getSongCover(song: Song): string {
   return (
-    song.coverUrl ||
-    song.album?.coverUrl ||
+    getSongCoverUrl(song) ??
     "https://placehold.co/160x160/333/ff0000?text=No+Cover"
   );
 }
@@ -61,7 +62,7 @@ function getSongCover(song: Song): string {
 function PlaylistGridCover({ playlist }: { playlist: Playlist }) {
   const songCovers = (playlist.songs || [])
     .slice(0, 4)
-    .map((entry: any) => entry.song?.coverUrl || entry.song?.album?.coverUrl || "")
+    .map((entry: any) => getSongCoverUrl(entry.song) ?? "")
     .filter(Boolean);
 
   if (songCovers.length >= 4) {
@@ -122,6 +123,7 @@ function SeeAllScreen() {
   const router = useRouter();
   const { playFromContext, currentSong } = usePlayer();
   const { isLikedSong, toggleLike } = useLikeSong();
+  const insets = useSafeAreaInsets();
   const [actionSong, setActionSong] = useState<Song | null>(null);
 
   const { section, data, isLoading, error, itemCount } =
@@ -148,35 +150,6 @@ function SeeAllScreen() {
     );
   }
 
-  const meta = SEE_ALL_SECTION_META[section];
-
-  const renderHeader = () => (
-    <View className="px-4 pb-4">
-      <View className="flex-row items-start gap-3 mb-1">
-        <View
-          className="p-2 rounded-full mt-1"
-          style={{ backgroundColor: `${meta.iconColor}20` }}
-        >
-          <StyledIonicons
-            name={meta.icon as any}
-            size={22}
-            color={meta.iconColor}
-          />
-        </View>
-        <View className="flex-1">
-          <Text className="text-2xl font-bold text-foreground">{meta.title}</Text>
-          <Text className="text-sm text-muted-foreground mt-1">
-            {meta.description}
-          </Text>
-          {!isLoading && (
-            <Text className="text-sm text-muted-foreground mt-2">
-              {itemCount} {itemCount === 1 ? "item" : "items"}
-            </Text>
-          )}
-        </View>
-      </View>
-    </View>
-  );
 
   const renderSongRow = (song: Song, index: number) => {
     const isPlaying = currentSong?.id === song.id;
@@ -468,6 +441,7 @@ function SeeAllScreen() {
                   <Image
                     uri={
                       item.coverUrl ||
+                      item.artistImageUrl ||
                       "https://placehold.co/160x160/333/ff0000?text=No+Cover"
                     }
                     variant="album"
@@ -558,7 +532,7 @@ function SeeAllScreen() {
   };
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-background" style={{ paddingBottom: insets.bottom }}>
       <SafeAreaView edges={["top"]} className="bg-background">
         <View className="flex-row items-center px-4 py-3">
           <TouchableOpacity
@@ -567,9 +541,17 @@ function SeeAllScreen() {
           >
             <StyledIonicons name="chevron-back" size={24} color="#fff" />
           </TouchableOpacity>
-          <Text className="text-foreground text-lg font-bold ml-3" numberOfLines={1}>
-            See All
-          </Text>
+          <View className="ml-3 flex-1">
+            <Text className="text-foreground text-lg font-bold">
+              {section ? SEE_ALL_SECTION_META[section].title : "See All"}
+            </Text>
+            {section && (
+              <Text className="text-muted-foreground text-xs mt-0.5">
+                {SEE_ALL_SECTION_META[section].description}
+                {!isLoading && ` • ${itemCount} ${itemCount === 1 ? "item" : "items"}`}
+              </Text>
+            )}
+          </View>
         </View>
       </SafeAreaView>
 
@@ -577,7 +559,6 @@ function SeeAllScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: currentSong ? 120 : 24 }}
       >
-        {renderHeader()}
         {renderContent()}
       </ScrollView>
 

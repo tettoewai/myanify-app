@@ -1,4 +1,8 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
+import { config as dotenvConfig } from "dotenv";
+
+// Load .env file
+dotenvConfig();
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
