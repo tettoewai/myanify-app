@@ -13,8 +13,8 @@
     },
     "production": {
       "autoIncrement": true,
-      "corepack": true,
-      "node": "22.14.0"
+      "node": "22.14.0",
+      "pnpm": "9.15.9"
     },
     "production-apk": {
       "extends": "production",
