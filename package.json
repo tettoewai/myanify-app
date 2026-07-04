@@ -2,6 +2,7 @@
   "name": "myanify",
   "main": "expo-router/entry",
   "version": "1.0.1",
+  "packageManager": "pnpm@10.11.0",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -10,7 +11,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "build:android-apk": "eas build --platform android --profile production-apk",
-    "build:android-aab": "eas build --platform android --profile production"
+    "build:android-aab": "eas build --platform android --profile production",
+    "eas-build-pre-install": "corepack enable"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
