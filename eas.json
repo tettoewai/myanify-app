@@ -14,7 +14,6 @@
     "production": {
       "autoIncrement": true,
       "corepack": true,
-      "pnpm": "10.11.0",
       "node": "22.14.0"
     },
     "production-apk": {

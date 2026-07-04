@@ -11,8 +11,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "build:android-apk": "eas build --platform android --profile production-apk",
-    "build:android-aab": "eas build --platform android --profile production",
-    "eas-build-pre-install": "corepack enable"
+    "build:android-aab": "eas build --platform android --profile production"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
