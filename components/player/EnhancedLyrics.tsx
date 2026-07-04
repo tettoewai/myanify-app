@@ -1,13 +1,17 @@
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { StyledImage as Image } from "@/components/styled";
-import { useSyncedLyrics } from "@/hooks/useSyncedLyrics";
 import { useLyricsAutoScroll } from "@/hooks/useLyricsAutoScroll";
+import { useSyncedLyrics } from "@/hooks/useSyncedLyrics";
+import { AppColors } from "@/lib/colors";
+import { getLyricsRowMaskOpacity } from "@/lib/lyrics-scroll-mask";
 import type { LyricLine } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
-import React, { memo, useCallback, useState, useRef, useMemo } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Dimensions,
   FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Text,
   TouchableOpacity,
   View,
@@ -47,18 +51,24 @@ const LyricItem = memo(
     lyric,
     isActive,
     isPast,
+    maskOpacity = 1,
     size = "medium",
   }: {
     lyric: LyricLine;
     isActive: boolean;
     isPast: boolean;
+    maskOpacity?: number;
     size?: LyricSize;
   }) => {
     const fontSize = size === "small" ? 16 : size === "large" ? 22 : 19;
-    const lineHeight = Math.round(fontSize * 1.6);
+    const lineHeight = Math.round(fontSize * 2);
+    const baseOpacity = isPast ? 0.3 : isActive ? 1 : 0.5;
 
     // Pre-split lines once
-    const lines = useMemo(() => lyric.text.split(/\r?\n/).filter(Boolean), [lyric.text]);
+    const lines = useMemo(
+      () => lyric.text.split(/\r?\n/).filter(Boolean),
+      [lyric.text],
+    );
 
     return (
       <View
@@ -67,7 +77,7 @@ const LyricItem = memo(
           justifyContent: "center",
           paddingHorizontal: 16,
           transform: [{ scale: isActive ? 1.05 : 0.98 }],
-          opacity: isPast ? 0.3 : isActive ? 1 : 0.5,
+          opacity: baseOpacity * maskOpacity,
         }}
       >
         {lines.map((line, index) => (
@@ -76,18 +86,13 @@ const LyricItem = memo(
             allowFontScaling={false}
             numberOfLines={2}
             style={{
-              color: isActive ? "#FFFFFF" : "rgba(255,255,255,0.7)",
+              color: isActive ? AppColors.foreground : "rgba(250,250,250,0.7)",
               fontSize,
               lineHeight,
               fontWeight: isActive ? "600" : "400",
               textAlign: "center",
               marginTop: index > 0 ? 4 : 0,
               includeFontPadding: false,
-              textShadowColor: isActive
-                ? "rgba(251,191,36,0.3)"
-                : "transparent",
-              textShadowOffset: { width: 0, height: 0 },
-              textShadowRadius: isActive ? 30 : 0,
             }}
           >
             {line}
@@ -100,6 +105,7 @@ const LyricItem = memo(
     prev.isActive === next.isActive &&
     prev.isPast === next.isPast &&
     prev.size === next.size &&
+    prev.maskOpacity === next.maskOpacity &&
     prev.lyric.text === next.lyric.text,
 );
 
@@ -117,7 +123,14 @@ export function EnhancedLyrics({
   onSeek,
 }: EnhancedLyricsProps) {
   const [size, setSize] = useState<LyricSize>("medium");
+  const [scrollOffset, setScrollOffset] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
   const flatListRef = useRef<FlatList>(null);
+  const itemHeight = ITEM_HEIGHTS[size];
+
+  useEffect(() => {
+    setScrollOffset(0);
+  }, [currentSong?.id]);
 
   const { currentLyricIndex, seekToken } = useSyncedLyrics(
     lyrics,
@@ -128,7 +141,6 @@ export function EnhancedLyrics({
 
   const {
     flatListRef: autoScrollRef,
-    isUserScrolling,
     onScrollBeginDrag,
     onScrollEndDrag,
     onFlatListLayout,
@@ -164,18 +176,42 @@ export function EnhancedLyrics({
     return size === "small" ? 16 : size === "large" ? 28 : 22;
   }, [size]);
 
-  // Use a key to force FlatList re-render only when active index changes significantly
-  // This prevents full re-render on every 50ms tick
+  const onScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      setScrollOffset(event.nativeEvent.contentOffset.y);
+    },
+    [],
+  );
+
+  const onListLayout = useCallback(
+    (event: Parameters<typeof onFlatListLayout>[0]) => {
+      setViewportHeight(event.nativeEvent.layout.height);
+      onFlatListLayout(event);
+    },
+    [onFlatListLayout],
+  );
+
+  const getRowMaskOpacity = useCallback(
+    (index: number) => {
+      if (viewportHeight <= 0) return 1;
+      const top = LIST_HEADER_HEIGHT + index * itemHeight - scrollOffset;
+      const bottom = top + itemHeight;
+      return getLyricsRowMaskOpacity(top, bottom, viewportHeight);
+    },
+    [viewportHeight, scrollOffset, itemHeight],
+  );
+
   const renderItem = useCallback(
     ({ item, index }: { item: LyricLine; index: number }) => (
       <LyricItem
         lyric={item}
         isActive={index === currentLyricIndex}
         isPast={index < currentLyricIndex}
+        maskOpacity={getRowMaskOpacity(index)}
         size={size}
       />
     ),
-    [currentLyricIndex, size],
+    [currentLyricIndex, size, getRowMaskOpacity],
   );
 
   const keyExtractor = useCallback(
@@ -203,7 +239,6 @@ export function EnhancedLyrics({
           flexDirection: "row",
           alignItems: "center",
           paddingHorizontal: 24,
-          paddingTop: 8,
           paddingBottom: 16,
           zIndex: 20,
         }}
@@ -217,24 +252,26 @@ export function EnhancedLyrics({
         <View style={{ marginLeft: 12, flex: 1 }}>
           <Text
             style={{
-              color: "#fff",
+              color: AppColors.foreground,
               fontSize: 16,
               fontWeight: "600",
               includeFontPadding: false,
             }}
             numberOfLines={2}
             allowFontScaling={false}
+            className="leading-relaxed"
           >
             {currentSong?.title || "Unknown Song"}
           </Text>
           <Text
             style={{
-              color: "#ff0000",
+              color: AppColors.primary,
               fontSize: 14,
               includeFontPadding: false,
             }}
             numberOfLines={1}
             allowFontScaling={false}
+            className="leading-relaxed"
           >
             {artistName}
           </Text>
@@ -251,19 +288,30 @@ export function EnhancedLyrics({
             justifyContent: "center",
           }}
         >
-          <StyledIonicons name="text" size={getIconSize()} color="#fff" />
+          <StyledIonicons name="text" size={getIconSize()} color={AppColors.iconOnDark} />
         </TouchableOpacity>
       </TouchableOpacity>
 
       {/* Lyrics list */}
       {isLoadingLyrics ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <ActivityIndicator size="large" color="#ff0000" />
-          <Text style={{ color: "#a3a3a3", marginTop: 12 }}>Loading lyrics...</Text>
+        <View
+          style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
+        >
+          <LoadingSpinner size="lg" />
+          <Text style={{ color: AppColors.mutedForeground, marginTop: 12 }}>
+            Loading lyrics...
+          </Text>
         </View>
       ) : lyrics.length === 0 ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 }}>
-          <Text style={{ color: "#a3a3a3", textAlign: "center" }}>
+        <View
+          style={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            paddingHorizontal: 32,
+          }}
+        >
+          <Text style={{ color: AppColors.mutedForeground, textAlign: "center" }}>
             No synchronized lyrics available for this song
           </Text>
         </View>
@@ -275,12 +323,20 @@ export function EnhancedLyrics({
           keyExtractor={keyExtractor}
           getItemLayout={getItemLayout}
           showsVerticalScrollIndicator={false}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           onScrollBeginDrag={onScrollBeginDrag}
           onScrollEndDrag={onScrollEndDrag}
-          onLayout={onFlatListLayout}
+          onLayout={onListLayout}
+          style={{ flex: 1 }}
+          extraData={{ scrollOffset, viewportHeight, currentLyricIndex, size }}
           // Spacers keep first/last item from hugging edges
-          ListHeaderComponent={<View style={{ height: LIST_HEADER_HEIGHT }} />}
-          ListFooterComponent={<View style={{ height: LIST_FOOTER_HEIGHT }} />}
+          ListHeaderComponent={
+            <View style={{ height: LIST_HEADER_HEIGHT }} />
+          }
+          ListFooterComponent={
+            <View style={{ height: LIST_FOOTER_HEIGHT }} />
+          }
           // Performance optimizations
           removeClippedSubviews={true}
           maxToRenderPerBatch={15}

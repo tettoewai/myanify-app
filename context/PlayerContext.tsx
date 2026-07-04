@@ -17,6 +17,7 @@ import {
   UP_NEXT_STORAGE_KEY,
   type PersistedQueueEntry,
 } from "@/lib/queue";
+import { useLockScreenPlayer } from "@/hooks/useLockScreenPlayer";
 import { fetchSongLyrics } from "@/lib/song-lyrics";
 import type { LyricLine, QueueItem, QueueItemSource, Song } from "@/lib/types";
 import {
@@ -132,8 +133,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [isResolvingSource, setIsResolvingSource] = useState(false);
   const [recentlyPlayedCache, setRecentlyPlayedCache] = useState<Song[]>([]);
 
-  const player = useAudioPlayer(playableUri);
+  const player = useAudioPlayer(null, { keepAudioSessionActive: true });
   const status = useAudioPlayerStatus(player);
+  const playableUriRef = useRef<string | undefined>(undefined);
 
   const positionSaveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
     null,
@@ -154,6 +156,34 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const userDisabledRadioRef = useRef(false);
   const currentSongRef = useRef<Song | null>(null);
   const upNextRef = useRef<QueueItem[]>([]);
+
+  const loadSource = useCallback(
+    (uri: string) => {
+      if (playableUriRef.current === uri) return;
+      playableUriRef.current = uri;
+      setPlayableUri(uri);
+      hasValidSourceRef.current = true;
+      playerReadyRef.current = false;
+      try {
+        player.replace(uri);
+      } catch (err) {
+        console.error("Failed to replace audio source:", err);
+      }
+    },
+    [player],
+  );
+
+  const clearSource = useCallback(() => {
+    playableUriRef.current = undefined;
+    setPlayableUri(undefined);
+    hasValidSourceRef.current = false;
+    playerReadyRef.current = false;
+    try {
+      player.pause();
+    } catch {
+      // Player may already be released during teardown.
+    }
+  }, [player]);
 
   useEffect(() => {
     upNextRef.current = upNext;
@@ -353,8 +383,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   // Reset lyrics state when song changes
   useEffect(() => {
-    console.log("🎵 Song changed, resetting lyrics state:", currentSong?.id);
-
     // Reset request flag
     setLyricsRequested(false);
     setIsLoadingLyrics(false);
@@ -367,50 +395,39 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     // Check cache first
     const cached = lyricsCacheRef.current.get(currentSong.id);
     if (cached !== undefined) {
-      console.log("✅ Lyrics found in cache:", cached.length);
       setCurrentSongLyrics(cached);
       return;
     }
 
     // Check if lyrics are embedded in the song object
     if (currentSong.lyrics !== undefined && currentSong.lyrics.length > 0) {
-      console.log("✅ Lyrics embedded in song:", currentSong.lyrics.length);
       lyricsCacheRef.current.set(currentSong.id, currentSong.lyrics);
       setCurrentSongLyrics(currentSong.lyrics);
       return;
     }
 
     // Clear lyrics for new song (will fetch when requested)
-    console.log("⏳ No lyrics available, waiting for request");
     setCurrentSongLyrics(undefined);
   }, [currentSong?.id, currentSong?.lyrics]);
 
   // Fetch lyrics when requested
   const requestCurrentSongLyrics = useCallback(() => {
-    console.log(
-      "📝 requestCurrentSongLyrics called, currentSong:",
-      currentSong?.id,
-    );
     if (!currentSong) {
-      console.log("❌ No current song, cannot request lyrics");
       return;
     }
 
     // Check if we already have lyrics
     if (currentSongLyrics !== undefined && currentSongLyrics.length > 0) {
-      console.log("✅ Lyrics already loaded:", currentSongLyrics.length);
       return;
     }
 
     // Check cache
     const cached = lyricsCacheRef.current.get(currentSong.id);
     if (cached !== undefined && cached.length > 0) {
-      console.log("✅ Lyrics in cache, setting:", cached.length);
       setCurrentSongLyrics(cached);
       return;
     }
 
-    console.log("🔄 Requesting lyrics fetch for:", currentSong.id);
     setLyricsRequested(true);
   }, [currentSong, currentSongLyrics]);
 
@@ -423,10 +440,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     // Check if we already have lyrics
     if (currentSongLyrics !== undefined && currentSongLyrics.length > 0) {
-      console.log(
-        "✅ Lyrics already present, skipping fetch:",
-        currentSongLyrics.length,
-      );
       setLyricsRequested(false); // Reset the flag
       return;
     }
@@ -434,24 +447,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     // Check cache again (in case it was populated after the check)
     const cached = lyricsCacheRef.current.get(currentSong.id);
     if (cached !== undefined && cached.length > 0) {
-      console.log("✅ Lyrics found in cache during fetch:", cached.length);
       setCurrentSongLyrics(cached);
       setLyricsRequested(false);
       return;
     }
 
-    console.log(
-      "🔄 Fetching lyrics for song:",
-      currentSong.id,
-      currentSong.title,
-    );
     let cancelled = false;
     setIsLoadingLyrics(true);
 
     fetchSongLyrics(currentSong.id)
       .then((lyrics) => {
         if (cancelled) return;
-        console.log("✅ Lyrics fetched successfully:", lyrics.length);
         lyricsCacheRef.current.set(currentSong.id, lyrics);
         setCurrentSongLyrics(lyrics);
         setLyricsRequested(false); // Reset the flag
@@ -505,7 +511,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const streamUrl = currentSong ? getSongStreamUrl(currentSong) : "";
 
     if (!streamUrl) {
-      setPlayableUri(undefined);
+      clearSource();
       return;
     }
 
@@ -513,23 +519,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       preloadedSongIdRef.current === currentSong?.id &&
       preloadUriRef.current
     ) {
-      setPlayableUri(preloadUriRef.current);
+      const uri = preloadUriRef.current;
       preloadUriRef.current = null;
       preloadedQidRef.current = null;
       preloadedSongIdRef.current = null;
-      playerReadyRef.current = false;
       setIsResolvingSource(false);
+      loadSource(uri);
       return;
     }
 
-    setPlayableUri(undefined);
     playerReadyRef.current = false;
     setIsResolvingSource(true);
     setError(null);
 
     resolvePlayableAudioUri(streamUrl)
       .then((uri) => {
-        if (!cancelled) setPlayableUri(uri);
+        if (!cancelled) loadSource(uri);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -551,7 +556,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [currentSong?.id, currentSong?.audioUrl, currentSong?.playbackUrl]);
+  }, [currentSong?.id, currentSong?.audioUrl, currentSong?.playbackUrl, loadSource, clearSource]);
 
   const advanceToNextRef = useRef<() => void>(() => {});
 
@@ -602,43 +607,97 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [currentSong?.id]);
 
+  const resolveSongById = useCallback(
+    async (id: string): Promise<Song | null> => {
+      const fromQueue = queue.find((s) => s.id === id);
+      if (fromQueue) return fromQueue;
+
+      const fromRecent = recentlyPlayedCache.find((s) => s.id === id);
+      if (fromRecent) return fromRecent;
+
+      try {
+        const data = await apiClient.get(`/songs/${id}`);
+        const song = data?.data || data;
+        return song ? formatSongFromApi(song) : null;
+      } catch {
+        return null;
+      }
+    },
+    [queue, recentlyPlayedCache],
+  );
+
   useEffect(() => {
+    if (!token) {
+      hasRestoredRef.current = false;
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!token || currentSong || hasRestoredRef.current) return;
+
     const restore = async () => {
-      if (currentSong || hasRestoredRef.current) return;
-      hasRestoredRef.current = true;
       try {
         const raw = await SecureStore.getItemAsync(UP_NEXT_STORAGE_KEY);
-        if (raw && queue.length > 0) {
+        if (raw) {
           const entries = JSON.parse(raw) as PersistedQueueEntry[];
-          const map = new Map(queue.map((s) => [s.id, s]));
-          const restored = restoreUserUpNext(
-            entries,
-            (id) => map.get(id) ?? queue.find((s) => s.id === id),
-          );
+          const restored = restoreUserUpNext(entries, (id) => {
+            const fromQueue = queue.find((s) => s.id === id);
+            if (fromQueue) return fromQueue;
+            return recentlyPlayedCache.find((s) => s.id === id);
+          });
+          if (restored.length < entries.length) {
+            for (const entry of entries) {
+              if (restored.some((item) => item.song.id === entry.songId)) {
+                continue;
+              }
+              const song = await resolveSongById(entry.songId);
+              if (song) restored.push(createQueueItem(song, entry.source));
+            }
+          }
           if (restored.length > 0) applyUpNext(restored);
         }
+
         const lastId = await SecureStore.getItemAsync(LAST_PLAYED_SONG_KEY);
+        if (!lastId) {
+          hasRestoredRef.current = true;
+          return;
+        }
+
+        const last = await resolveSongById(lastId);
+        if (!last) return;
+
+        hasRestoredRef.current = true;
+        setCurrentSong(last);
+        setQueue((prev) =>
+          prev.some((s) => s.id === last.id) ? prev : [last, ...prev],
+        );
+
         const lastPos = await SecureStore.getItemAsync(
           LAST_PLAYBACK_POSITION_KEY,
         );
-        if (lastId && queue.length > 0) {
-          const last = queue.find((s) => s.id === lastId);
-          if (last) {
-            setCurrentSong(last);
-            if (lastPos) {
-              const saved = JSON.parse(lastPos);
-              if (saved.songId === last.id) {
-                restorePositionRef.current = saved.timestamp;
-              }
-            }
+        if (lastPos) {
+          const saved = JSON.parse(lastPos);
+          if (saved.songId === last.id && saved.timestamp > 0) {
+            restorePositionRef.current = saved.timestamp;
+            setCurrentTime(saved.timestamp);
+            if (last.duration > 0) setDuration(last.duration);
           }
         }
       } catch (e) {
+        hasRestoredRef.current = true;
         console.error("Restore error:", e);
       }
     };
-    if (queue.length > 0) void restore();
-  }, [queue, currentSong, applyUpNext]);
+
+    void restore();
+  }, [
+    token,
+    currentSong,
+    queue,
+    recentlyPlayedCache,
+    applyUpNext,
+    resolveSongById,
+  ]);
 
   useEffect(() => {
     if (!currentSong || !upNext[0] || duration <= 0) return;
@@ -682,18 +741,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [isPlaying, currentSong, currentTime]);
 
+  // Only react to native status changes — not optimistic isPlaying updates from
+  // togglePlay, which would briefly revert the UI before status.playing catches up.
   useEffect(() => {
     if (!playerReadyRef.current || !hasValidSourceRef.current) return;
-    if (isPlaying && !player.playing) {
-      try {
-        player.play();
-      } catch {
-        setIsPlaying(false);
-      }
-    } else if (!isPlaying && player.playing) {
-      player.pause();
-    }
-  }, [isPlaying, player]);
+    if (isSeekingRef.current) return;
+    setIsPlaying((prev) =>
+      prev === status.playing ? prev : status.playing,
+    );
+  }, [status.playing]);
 
   useEffect(() => {
     if (playerReadyRef.current && hasValidSourceRef.current) {
@@ -1077,14 +1133,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const seekTo = useCallback(
     (time: number) => {
       if (!playerReadyRef.current || !hasValidSourceRef.current) {
-        console.warn("⚠️ Player not ready for seeking");
         return;
       }
 
       // Clamp time to valid range
       const clampedTime = Math.max(0, Math.min(time, duration || 0));
-
-      console.log("⏭️ Seeking to:", clampedTime);
 
       // Set seeking flag
       isSeekingRef.current = true;
@@ -1098,8 +1151,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const wasPlaying = isPlaying;
 
         if (isFarSeek) {
-          console.log("📦 Far seek detected, reloading audio source");
-
           // For far seeks, the best approach is to reload the audio source
           // with the seek position as a query parameter
           const song = currentSongRef.current;
@@ -1137,8 +1188,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           // Resolve the new URI and reload
           resolvePlayableAudioUri(urlWithSeek)
             .then((newUri) => {
-              // Set the new source - this will trigger a reload
-              setPlayableUri(newUri);
+              loadSource(newUri);
 
               // Store the position to seek to after reload
               restorePositionRef.current = clampedTime;
@@ -1196,7 +1246,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         isSeekingRef.current = false;
       }
     },
-    [player, duration, isPlaying, status.currentTime],
+    [player, duration, isPlaying, status.currentTime, loadSource],
   );
 
   const nextSong = useCallback(() => {
@@ -1279,7 +1329,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const togglePlay = useCallback(() => {
     if (!hasValidSourceRef.current || !playerReadyRef.current) {
-      console.warn("⚠️ Player not ready for play/pause");
       return;
     }
 
@@ -1304,7 +1353,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           if (streamUrl) {
             resolvePlayableAudioUri(streamUrl)
               .then((uri) => {
-                setPlayableUri(uri);
+                loadSource(uri);
                 setTimeout(() => {
                   try {
                     player.play();
@@ -1319,13 +1368,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         }
       }
     }
-  }, [hasValidSourceRef, playerReadyRef, isPlaying, player, currentSong]);
+  }, [hasValidSourceRef, playerReadyRef, isPlaying, player, currentSong, loadSource]);
 
   const getRecentlyPlayed = useCallback((): Song[] => {
     return recentlyPlayedCache;
   }, [recentlyPlayedCache]);
 
   const clearError = useCallback(() => setError(null), []);
+
+  useLockScreenPlayer({
+    player,
+    song: currentSong,
+    isPlaying,
+    onNext: nextSong,
+    onPrevious: prevSong,
+  });
 
   const setQueueLegacy = useCallback(
     (songs: Song[]) => {

@@ -1,3 +1,4 @@
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { FullPlayer } from "@/components/player/FullPlayer";
 import { StyledSafeAreaView as SafeAreaView } from "@/components/styled";
@@ -8,8 +9,8 @@ import { formatSongFromApi } from "@/lib/song-format";
 import type { Song } from "@/lib/types";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Text, TouchableOpacity, View } from "react-native";
 
 export default function SongPage() {
   return (
@@ -64,7 +65,7 @@ function SongPlayerScreen() {
     return (
       <SafeAreaView className="flex-1 bg-black" edges={["top"]}>
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#ff0000" />
+          <LoadingSpinner size="lg" />
           <Text className="mt-4 text-neutral-400">Loading song...</Text>
         </View>
       </SafeAreaView>
@@ -87,9 +88,5 @@ function SongPlayerScreen() {
     );
   }
 
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <FullPlayer />
-    </SafeAreaView>
-  );
+  return <FullPlayer />;
 }

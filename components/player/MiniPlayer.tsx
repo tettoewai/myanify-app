@@ -2,11 +2,12 @@ import { StyledImage as Image } from "@/components/styled";
 import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
+import { AppColors } from "@/lib/colors";
 import { getSongCoverUrl } from "@/lib/song-cover";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { type Href, useRouter, useSegments } from "expo-router";
+import { useRouter, useSegments } from "expo-router";
 import React, { useEffect } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import Animated, {
@@ -16,14 +17,11 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useUniwind } from "uniwind";
 
 export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
   const router = useRouter();
   const segments = useSegments();
   const insets = useSafeAreaInsets();
-  const { theme } = useUniwind();
-  const isDark = theme === "dark";
   const { token } = useAuth();
   const {
     currentSong,
@@ -88,7 +86,7 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
         duration: animationDuration,
       });
     }
-  }, [shouldBeVisible, targetBottom]);
+  }, [shouldBeVisible, targetBottom, opacity, translateY, bottomShared, animationDuration]);
 
   const progress = duration > 0 ? currentTime / duration : 0;
 
@@ -117,17 +115,11 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
   return (
     <Animated.View style={animatedStyle}>
       <LinearGradient
-        colors={
-          isDark
-            ? ["rgba(26, 26, 26, 0.95)", "#0a0a0a"]
-            : ["rgba(245, 245, 245, 0.95)", "#ffffff"]
-        }
+        colors={["rgba(26, 26, 26, 0.95)", AppColors.background]}
         className="border-b-0 m-0 p-0"
       >
         {/* Progress Bar */}
-        <View
-          className={isDark ? "h-[2px] bg-white/10" : "h-[2px] bg-black/10"}
-        >
+        <View className="h-[2px] bg-white/10">
           <Animated.View
             className="h-full bg-primary"
             style={{
@@ -138,7 +130,7 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
 
         <TouchableOpacity
           onPress={() => {
-            router.push(`/song/${currentSong.id}` as Href);
+            router.push("/player");
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
           activeOpacity={0.9}
@@ -157,17 +149,15 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
           {/* Song Info */}
           <View className="flex-1 mr-3">
             <Text
-              className={`${
-                isDark ? "text-white" : "text-foreground"
-              } text-base font-semibold mb-1 leading-loose`}
+              className="text-base font-semibold mb-1 leading-loose"
+              style={{ color: AppColors.foreground }}
               numberOfLines={1}
             >
               {currentSong.title}
             </Text>
             <Text
-              className={`${
-                isDark ? "text-[#a3a3a3]" : "text-muted-foreground"
-              } text-sm leading-loose`}
+              className="text-sm leading-loose"
+              style={{ color: AppColors.mutedForeground }}
               numberOfLines={1}
             >
               {getArtistName()}
@@ -189,10 +179,8 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
                 size={24}
                 color={
                   isLikedSong(currentSong.id)
-                    ? "#ff0000"
-                    : isDark
-                      ? "white"
-                      : "#0a0a0a"
+                    ? AppColors.primary
+                    : AppColors.iconOnDark
                 }
               />
             </TouchableOpacity>
@@ -208,7 +196,7 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
               <Ionicons
                 name={isPlaying ? "pause" : "play"}
                 size={28}
-                color={isDark ? "white" : "#0a0a0a"}
+                color={AppColors.iconOnDark}
               />
             </TouchableOpacity>
 
@@ -223,7 +211,7 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
               <Ionicons
                 name="play-skip-forward"
                 size={24}
-                color={isDark ? "white" : "#0a0a0a"}
+                color={AppColors.iconOnDark}
               />
             </TouchableOpacity>
           </View>

@@ -1,3 +1,4 @@
+import { LoadingView } from "@/components/LoadingSpinner";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import {
   StyledImage as Image,
@@ -11,7 +12,6 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { Spinner } from "heroui-native";
 import React, { useMemo, useState } from "react";
 import {
   FlatList,
@@ -38,7 +38,6 @@ export default function LikedSongs() {
 function LikedSongsScreen() {
   const { likedSongs, isLoading, toggleLike } = useLikeSong();
   const { playFromContext, setIsShuffled, currentSong } = usePlayer();
-  const [actionSong, setActionSong] = useState<Song | null>(null);
   const router = useRouter();
   const [sortBy, setSortBy] = useState<SortOption>("recent");
   const [showSortModal, setShowSortModal] = useState(false);
@@ -82,7 +81,6 @@ function LikedSongsScreen() {
             : "active:bg-card/50"
         }`}
         onPress={() => handlePlaySong(item)}
-        onLongPress={() => setActionSong(item)}
       >
         {/* Track Number / Playing Indicator */}
         <View className="w-8 items-center justify-center mr-3">
@@ -144,10 +142,10 @@ function LikedSongsScreen() {
   if (isLoading && !likedSongs.length) {
     return (
       <SafeAreaView
-        className="flex-1 bg-background justify-center items-center"
+        className="flex-1 bg-background"
         edges={["left", "right"]}
       >
-        <Spinner size="lg" />
+        <LoadingView />
       </SafeAreaView>
     );
   }

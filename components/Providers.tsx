@@ -1,10 +1,9 @@
 import { HeroUINativeConfig, HeroUINativeProvider } from "heroui-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactNode, useCallback, useEffect, useState } from "react";
+import { ReactNode, useCallback, useState } from "react";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { Uniwind } from "uniwind";
 import { AuthProvider } from "@/context/AuthContext";
 import { PlayerProvider } from "@/context/PlayerContext";
 import * as SplashScreen from "expo-splash-screen";
@@ -37,24 +36,7 @@ const config: HeroUINativeConfig = {
 
 export default function Provider({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
-  const [appIsReady, setAppIsReady] = useState(false);
-
-  useEffect(() => {
-    async function prepare() {
-      try {
-        // Set theme
-        Uniwind.setTheme("dark");
-        // Add any other initialization here if needed
-      } catch (e) {
-        console.warn(e);
-      } finally {
-        // Tell the application to render
-        setAppIsReady(true);
-      }
-    }
-
-    prepare();
-  }, []);
+  const [appIsReady, setAppIsReady] = useState(true);
 
   const onLayoutRootView = useCallback(async () => {
     if (appIsReady) {

@@ -5,7 +5,7 @@
  * Uses expo-file-system for downloads and expo-secure-store for license storage.
  */
 
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as SecureStore from "expo-secure-store";
 import { apiClient } from "./api";
 import { authStorage } from "./auth-storage";

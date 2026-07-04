@@ -1,2 +1,4 @@
 allowBuilds:
   unrs-resolver: true
+patchedDependencies:
+  expo-audio@1.1.1: patches/expo-audio@1.1.1.patch

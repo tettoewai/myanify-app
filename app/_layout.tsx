@@ -3,6 +3,7 @@ import { MiniPlayer } from "@/components/player/MiniPlayer";
 import { Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import "../global.css";
+import "@/lib/theme";
 
 export default function RootLayout() {
   const segments = useSegments();
@@ -28,6 +29,9 @@ export default function RootLayout() {
             headerShown: false,
             presentation: "fullScreenModal",
             animation: "slide_from_bottom",
+            contentStyle: { backgroundColor: "#000000" },
+            statusBarStyle: "light",
+            statusBarHidden: false,
           }}
         />
         <Stack.Screen
@@ -36,6 +40,9 @@ export default function RootLayout() {
             headerShown: false,
             presentation: "fullScreenModal",
             animation: "slide_from_bottom",
+            contentStyle: { backgroundColor: "#000000" },
+            statusBarStyle: "light",
+            statusBarHidden: false,
           }}
         />
         <Stack.Screen name="artist/[id]" options={{ headerShown: false }} />

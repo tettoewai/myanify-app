@@ -1,23 +1,18 @@
+import { LoadingView } from "@/components/LoadingSpinner";
 import { useAuth } from "@/context/AuthContext";
+import { AppColors } from "@/lib/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { Redirect, Tabs } from "expo-router";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useUniwind } from "uniwind";
 
 export default function TabsLayout() {
   const { token, isLoading } = useAuth();
   const insets = useSafeAreaInsets();
-  const { theme } = useUniwind();
-  const isDark = theme === "dark";
   const TAB_BAR_HEIGHT = 60 + insets.bottom;
 
   if (isLoading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator size="large" color="#ff0000" />
-      </View>
-    );
+    return <LoadingView />;
   }
 
   if (!token) {
@@ -28,10 +23,10 @@ export default function TabsLayout() {
     <View className="flex-1">
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: "#ff0000",
-          tabBarInactiveTintColor: isDark ? "#a3a3a3" : "#737373",
+          tabBarActiveTintColor: AppColors.primary,
+          tabBarInactiveTintColor: AppColors.mutedForeground,
           tabBarStyle: {
-            backgroundColor: isDark ? "#0a0a0a" : "#ffffff",
+            backgroundColor: AppColors.background,
             borderTopWidth: 0,
             elevation: 0,
             height: TAB_BAR_HEIGHT,

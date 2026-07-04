@@ -12,26 +12,27 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.tlab.myanify",
       "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
               "com.googleusercontent.apps.739457800060-s319n61if27pmd7lhffoqhatpi2k7asb"
             ]
           }
-        ]
-      },
-      "plugins": [
-        [
-          "@react-native-google-signin/google-signin",
-          {
-            "iosUrlScheme": "com.googleusercontent.apps.739457800060-s319n61if27pmd7lhffoqhatpi2k7asb"
-          }
-        ]
-      ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "userInterfaceStyle": "dark",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE"
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#000000"
       },
       "versionCode": 2,
       "edgeToEdgeEnabled": true,
@@ -43,6 +44,12 @@
       "favicon": "./assets/images/icon.png"
     },
     "plugins": [
+      [
+        "expo-audio",
+        {
+          "recordAudioAndroid": false
+        }
+      ],
       "expo-router",
       [
         "expo-splash-screen",
@@ -57,7 +64,12 @@
         }
       ],
       "expo-asset",
-      "@react-native-google-signin/google-signin"
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.739457800060-s319n61if27pmd7lhffoqhatpi2k7asb"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

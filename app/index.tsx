@@ -1,8 +1,9 @@
+import { LoadingView } from "@/components/LoadingSpinner";
 import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Link, Redirect } from "expo-router";
 import { Button } from "heroui-native";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function Index() {
@@ -15,11 +16,7 @@ export default function Index() {
   }
 
   if (isLoading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator size="large" color="#ff0000" />
-      </View>
-    );
+    return <LoadingView />;
   }
 
   const features = [

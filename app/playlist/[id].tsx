@@ -1,3 +1,4 @@
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import {
   StyledImage as Image,
@@ -8,6 +9,7 @@ import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { useLibrary } from "@/hooks/useLibrary";
 import { apiClient } from "@/lib/api";
+import { AppColors } from "@/lib/colors";
 import { formatSongFromApi } from "@/lib/song-format";
 import { getSongCoverUrl } from "@/lib/song-cover";
 import { Song } from "@/lib/types";
@@ -20,7 +22,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useToast } from "heroui-native";
 import React, { useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Dimensions,
   Modal,
@@ -68,12 +69,10 @@ function PlaylistDetailsScreen() {
   const router = useRouter();
   const { token } = useAuth();
   const {
-    playSong,
     playFromContext,
     currentSong: playingSong,
     isPlaying,
   } = usePlayer();
-  const [actionSong, setActionSong] = useState<Song | null>(null);
   const { isLikedSong, toggleLike } = useLikeSong();
   const insets = useSafeAreaInsets();
   const { deletePlaylist, removeFromPlaylist, updatePlaylist } = useLibrary();
@@ -196,7 +195,7 @@ function PlaylistDetailsScreen() {
   if (playlistLoading) {
     return (
       <View className="flex-1 justify-center items-center bg-background">
-        <ActivityIndicator size="large" color="#ff0000" />
+        <LoadingSpinner size="lg" />
         <Text className="text-neutral-400 mt-4">Loading playlist...</Text>
       </View>
     );
@@ -274,7 +273,7 @@ function PlaylistDetailsScreen() {
         </View>
         <TouchableOpacity
           onPress={() => {
-            toggleLike(item.id);
+            toggleLike(item);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           }}
           className="p-2"
@@ -615,7 +614,8 @@ function PlaylistDetailsScreen() {
                 <TextInput
                   className="w-full bg-card border-2 border-border focus:border-primary rounded-xl px-5 py-4 text-foreground text-lg"
                   placeholder="My awesome playlist"
-                  placeholderTextColor="#737373"
+                  placeholderTextColor={AppColors.placeholder}
+                  style={{ color: AppColors.foreground }}
                   value={editedName}
                   onChangeText={setEditedName}
                 />
@@ -629,7 +629,8 @@ function PlaylistDetailsScreen() {
                 <TextInput
                   className="w-full bg-card border-2 border-border focus:border-primary rounded-xl px-5 py-4 text-foreground text-base"
                   placeholder="Add a description..."
-                  placeholderTextColor="#737373"
+                  placeholderTextColor={AppColors.placeholder}
+                  style={{ color: AppColors.foreground }}
                   value={editedDescription}
                   onChangeText={setEditedDescription}
                   multiline

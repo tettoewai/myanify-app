@@ -1,6 +1,8 @@
+import { LoadingSpinner, LoadingView } from "@/components/LoadingSpinner";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
 import { authStorage } from "@/lib/auth-storage";
+import { AppColors } from "@/lib/colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   GoogleSignin,
@@ -8,10 +10,10 @@ import {
 } from "@react-native-google-signin/google-signin";
 import { useMutation } from "@tanstack/react-query";
 import Constants from "expo-constants";
-import { Button, Input, Spinner, useToast } from "heroui-native";
+import { Button, Input, useToast } from "heroui-native";
 import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { withUniwind } from "uniwind";
 
 const StyledIonicons = withUniwind(Ionicons);
@@ -68,7 +70,7 @@ export default function Login() {
         errorMessage.includes("failed")
       ) {
         errorMessage =
-          "Connection to server failed. Please ensure your backend is running and both devices are on the same Wi-Fi.";
+          "Unable to connect to Myanify. Check your internet connection and try again.";
       }
 
       const statusCode = error.response?.status;
@@ -164,11 +166,7 @@ export default function Login() {
     email !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   if (authLoading) {
-    return (
-      <View className="flex-1 justify-center items-center bg-background">
-        <ActivityIndicator size="large" color="#ff0000" />
-      </View>
-    );
+    return <LoadingView />;
   }
 
   if (token) {
@@ -209,13 +207,13 @@ export default function Login() {
             isDisabled={googleLoginMutation.isPending}
           >
             {googleLoginMutation.isPending ? (
-              <Spinner color="white" size="sm" />
+              <LoadingSpinner size="sm" color="#ffffff" />
             ) : (
               <>
                 <Ionicons
                   name="logo-google"
                   size={18}
-                  color="white"
+                  color={AppColors.iconOnDark}
                   className="mr-2"
                 />
                 <Button.Label>Continue with Google</Button.Label>
@@ -240,7 +238,6 @@ export default function Login() {
             <View className="w-full flex-row items-center relative">
               <Input
                 placeholder="Enter your email"
-                placeholderTextColor="rgb(107, 114, 128, 0.5)"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={email}
@@ -271,7 +268,6 @@ export default function Login() {
             <View className="w-full flex-row items-center relative">
               <Input
                 placeholder="Enter password"
-                placeholderTextColor="rgb(107, 114, 128, 0.5)"
                 secureTextEntry={!isVisible}
                 className="flex-1 pl-10 pr-12 rounded-sm"
                 value={password}
@@ -306,7 +302,7 @@ export default function Login() {
             isDisabled={loginMutation.isPending}
           >
             {loginMutation.isPending ? (
-              <Spinner color="white" size="sm" />
+              <LoadingSpinner size="sm" color="#ffffff" />
             ) : (
               <Button.Label>Sign In</Button.Label>
             )}

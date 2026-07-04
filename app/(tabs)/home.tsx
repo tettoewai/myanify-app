@@ -1,3 +1,4 @@
+import { LoadingView } from "@/components/LoadingSpinner";
 import { SignInPrompt } from "@/components/auth/SignInPrompt";
 import {
   StyledImage as Image,
@@ -10,6 +11,7 @@ import { useLikeSong } from "@/hooks/useLikeSong";
 import { apiClient } from "@/lib/api";
 import { formatSongFromApi } from "@/lib/song-format";
 import { seeAllPath } from "@/lib/see-all-sections";
+import { AppColors } from "@/lib/colors";
 import { getSongCoverUrl } from "@/lib/song-cover";
 import { Album, Artist, Genre, Playlist, Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,9 +19,10 @@ import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { type Href, useRouter } from "expo-router";
-import { Card, Spinner } from "heroui-native";
+import { Card } from "heroui-native";
 import { useCallback, useMemo, useState } from "react";
 import {
+  Platform,
   RefreshControl,
   ScrollView,
   Text,
@@ -27,6 +30,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+const FEATURED_CARD_HEIGHT = 208;
 
 interface HomeData {
   featuredSong: any | null;
@@ -174,11 +179,7 @@ export default function Home() {
   }, []);
 
   if (authLoading) {
-    return (
-      <View className="flex-1 justify-center items-center bg-background">
-        <Spinner size="lg" color="#ff0000" />
-      </View>
-    );
+    return <LoadingView />;
   }
 
   if (!token) {
@@ -281,7 +282,7 @@ export default function Home() {
                 <Ionicons
                   name="notifications-outline"
                   size={22}
-                  color="white"
+                  color={AppColors.iconOnDark}
                 />
               </TouchableOpacity>
               {/* <TouchableOpacity
@@ -308,7 +309,7 @@ export default function Home() {
                     Liked Songs
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color="#888" />
+                <Ionicons name="chevron-forward" size={20} color={AppColors.iconMuted} />
               </View>
             </TouchableOpacity>
             <TouchableOpacity
@@ -323,7 +324,7 @@ export default function Home() {
                     Library
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color="#888" />
+                <Ionicons name="chevron-forward" size={20} color={AppColors.iconMuted} />
               </View>
             </TouchableOpacity>
           </View>
@@ -339,14 +340,28 @@ export default function Home() {
                 onLongPress={() => handleLongPressSong(featuredSong)}
                 accessibilityLabel={`Play featured song: ${featuredSong.title}`}
               >
-                <View className="rounded-3xl overflow-hidden shadow-lg">
+                <View
+                  style={{
+                    height: FEATURED_CARD_HEIGHT,
+                    borderRadius: 24,
+                    overflow: "hidden",
+                    ...(Platform.OS === "ios"
+                      ? {
+                          shadowColor: "#000",
+                          shadowOffset: { width: 0, height: 4 },
+                          shadowOpacity: 0.25,
+                          shadowRadius: 8,
+                        }
+                      : { elevation: 6 }),
+                  }}
+                >
                   <Image
-                      uri={
-                        getSongCoverUrl(featuredSong) ??
-                        "https://placehold.co/400x400/333/ff0000?text=No+Cover"
-                      }
+                    uri={
+                      getSongCoverUrl(featuredSong) ??
+                      "https://placehold.co/400x400/333/ff0000?text=No+Cover"
+                    }
                     variant="album"
-                    className="w-full h-52"
+                    style={{ width: "100%", height: FEATURED_CARD_HEIGHT }}
                     contentFit="cover"
                     transition={200}
                   />
@@ -356,26 +371,27 @@ export default function Home() {
                       "rgba(0,0,0,0.5)",
                       "rgba(0,0,0,0.85)",
                     ]}
-                    className="absolute inset-0 justify-end p-4"
+                    locations={[0, 0.45, 1]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                    pointerEvents="none"
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                    }}
+                  />
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 16,
+                      left: 12,
+                      flexDirection: "row",
+                      alignItems: "center",
+                    }}
                   >
-                    <View className="flex-1 pl-4 pt-2">
-                      <Text
-                        className="text-white text-lg font-bold leading-loose"
-                        numberOfLines={1}
-                      >
-                        {featuredSong.title}
-                      </Text>
-                      <Text
-                        className="text-white/70 text-sm leading-loose"
-                        numberOfLines={1}
-                      >
-                        {featuredSong.artists
-                          .map((a: any) => a.artist.name)
-                          .join(", ")}
-                      </Text>
-                    </View>
-                  </LinearGradient>
-                  <View className="flex-row items-center gap-2 mb-2 absolute top-4 left-3">
                     <View className="bg-primary px-2.5 py-0.5 rounded-full flex-row items-center gap-1">
                       <View className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                       <Text className="text-white text-xs font-bold">
@@ -383,10 +399,20 @@ export default function Home() {
                       </Text>
                     </View>
                   </View>
-                  <View className="absolute top-3 right-3">
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 12,
+                      right: 12,
+                    }}
+                  >
                     <TouchableOpacity
                       onPress={(e) => handleToggleLike(featuredSong, e)}
-                      className="bg-black/50 rounded-full p-2"
+                      style={{
+                        backgroundColor: "rgba(0,0,0,0.5)",
+                        borderRadius: 999,
+                        padding: 8,
+                      }}
                       accessibilityLabel={
                         isLikedSong(featuredSong.id)
                           ? "Remove from liked"
@@ -406,8 +432,61 @@ export default function Home() {
                       />
                     </TouchableOpacity>
                   </View>
-                  <View className="absolute bottom-4 right-4">
-                    <View className="bg-primary rounded-full p-3 shadow-lg">
+                  <View
+                    style={{
+                      position: "absolute",
+                      left: 16,
+                      right: 16,
+                      bottom: 16,
+                      flexDirection: "row",
+                      alignItems: "flex-end",
+                      justifyContent: "space-between",
+                      gap: 12,
+                    }}
+                  >
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text
+                        style={{
+                          color: "#fff",
+                          fontSize: 18,
+                          fontWeight: "700",
+                          lineHeight: 28,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {featuredSong.title}
+                      </Text>
+                      <Text
+                        style={{
+                          color: "rgba(255,255,255,0.7)",
+                          fontSize: 14,
+                          lineHeight: 22,
+                          marginTop: 2,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {featuredSong.artist ||
+                          featuredSong.artists
+                            ?.map((a) => a.artist.name)
+                            .join(", ") ||
+                          "Unknown Artist"}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        backgroundColor: "#ff0000",
+                        borderRadius: 999,
+                        padding: 12,
+                        ...(Platform.OS === "ios"
+                          ? {
+                              shadowColor: "#000",
+                              shadowOffset: { width: 0, height: 2 },
+                              shadowOpacity: 0.3,
+                              shadowRadius: 4,
+                            }
+                          : { elevation: 4 }),
+                      }}
+                    >
                       <Ionicons name="play" size={22} color="white" />
                     </View>
                   </View>
@@ -440,10 +519,10 @@ export default function Home() {
                   >
                     <View className="relative">
                       <Image
-                          uri={
-                            getSongCoverUrl(song) ??
-                            "https://placehold.co/160x160/333/ff0000?text=No+Cover"
-                          }
+                        uri={
+                          getSongCoverUrl(song) ??
+                          "https://placehold.co/160x160/333/ff0000?text=No+Cover"
+                        }
                         variant="album"
                         className="w-[160px] h-[160px] rounded-2xl"
                         contentFit="cover"
@@ -739,10 +818,7 @@ export default function Home() {
                 {featuredPlaylists.map((playlist) => {
                   const songCovers: string[] = (playlist.songs || [])
                     .slice(0, 4)
-                    .map(
-                      (ps: any) =>
-                        getSongCoverUrl(ps.song) ?? "",
-                    )
+                    .map((ps: any) => getSongCoverUrl(ps.song) ?? "")
                     .filter(Boolean);
 
                   return (
@@ -842,11 +918,11 @@ export default function Home() {
                   >
                     <View className="relative shadow-xl">
                       <Image
-                          uri={
-                            album.coverUrl ||
-                            album.artistImageUrl ||
-                            "https://placehold.co/160x160/333/ff0000?text=No+Cover"
-                          }
+                        uri={
+                          album.coverUrl ||
+                          album.artistImageUrl ||
+                          "https://placehold.co/160x160/333/ff0000?text=No+Cover"
+                        }
                         variant="album"
                         className="w-[160px] h-[160px] rounded-2xl"
                         contentFit="cover"

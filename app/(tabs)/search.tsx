@@ -1,3 +1,4 @@
+import { LoadingSpinner, LoadingView } from "@/components/LoadingSpinner";
 import { SignInPrompt } from "@/components/auth/SignInPrompt";
 import {
   StyledImage as Image,
@@ -9,6 +10,7 @@ import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { useSearch } from "@/hooks/useSearch";
 import { apiClient } from "@/lib/api";
+import { AppColors } from "@/lib/colors";
 import { formatSongFromApi } from "@/lib/song-format";
 import { getSongCoverUrl } from "@/lib/song-cover";
 import { Artist, Genre, Song } from "@/lib/types";
@@ -19,7 +21,6 @@ import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { Card, Input, TextField } from "heroui-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Dimensions,
   FlatList,
   ScrollView,
@@ -95,22 +96,22 @@ export default function Search() {
   });
 
   const genres: Genre[] = genresData?.data || [];
-  const rawSearchSongs: any[] = searchData?.songs || [];
   const artists: Artist[] = searchData?.artists || [];
-  const rawGenreSongs: any[] = genreSongsData?.data || [];
 
   const searchSongs: Song[] = useMemo(
-    () => rawSearchSongs.map(formatSongFromApi),
-    [rawSearchSongs],
+    () => (searchData?.songs || []).map(formatSongFromApi),
+    [searchData?.songs],
   );
   const genreSongs: Song[] = useMemo(
-    () => rawGenreSongs.map(formatSongFromApi),
-    [rawGenreSongs],
+    () => (genreSongsData?.data || []).map(formatSongFromApi),
+    [genreSongsData?.data],
   );
 
   const selectedGenre = useMemo(
-    () => genres.find((g) => g.id === selectedGenreId) ?? null,
-    [genres, selectedGenreId],
+    () =>
+      (genresData?.data || []).find((g: Genre) => g.id === selectedGenreId) ??
+      null,
+    [genresData?.data, selectedGenreId],
   );
 
   const handlePlaySong = useCallback(
@@ -256,9 +257,7 @@ export default function Search() {
   if (authLoading) {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
-        <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#ff0000" />
-        </View>
+        <LoadingView />
       </SafeAreaView>
     );
   }
@@ -277,7 +276,7 @@ export default function Search() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
-      <View className="px-4 pt-4">
+      <View className="px-4 pt-4 mt-10">
         {selectedGenreId && !shouldSearch ? (
           <View className="flex-row items-center mb-4">
             <TouchableOpacity
@@ -285,7 +284,7 @@ export default function Search() {
               className="mr-3 p-1"
               accessibilityLabel="Back to browse"
             >
-              <Ionicons name="arrow-back" size={24} color="white" />
+              <Ionicons name="arrow-back" size={24} color={AppColors.iconOnDark} />
             </TouchableOpacity>
             <View className="flex-1">
               <Text className="text-2xl font-bold text-foreground leading-loose">
@@ -343,7 +342,7 @@ export default function Search() {
 
       {isLoading ? (
         <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#ff0000" />
+          <LoadingSpinner size="lg" />
         </View>
       ) : showBrowse ? (
         <FlatList

@@ -1,3 +1,4 @@
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { SongActionSheet } from "@/components/SongActionSheet";
 import {
@@ -12,7 +13,7 @@ import {
   SEE_ALL_SECTION_META,
   type SeeAllSection,
 } from "@/lib/see-all-sections";
-import type { Album, Artist, Genre, Playlist, Song } from "@/lib/types";
+import type { Playlist, Song } from "@/lib/types";
 import { getSongCoverUrl } from "@/lib/song-cover";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -21,7 +22,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  ActivityIndicator,
   Dimensions,
   ScrollView,
   Text,
@@ -272,7 +272,7 @@ function SeeAllScreen() {
     if (isLoading) {
       return (
         <View className="py-20 items-center">
-          <ActivityIndicator size="large" color="#ff0000" />
+          <LoadingSpinner size="lg" />
           <Text className="text-muted-foreground mt-4">Loading...</Text>
         </View>
       );

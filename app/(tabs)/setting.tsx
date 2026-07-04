@@ -1,3 +1,4 @@
+import { LoadingView } from "@/components/LoadingSpinner";
 import { SignInPrompt } from "@/components/auth/SignInPrompt";
 import {
   StyledSafeAreaView as SafeAreaView,
@@ -6,13 +7,13 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
 import { apiClient } from "@/lib/api";
+import { AppColors } from "@/lib/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { Button, Card, Dialog, useToast } from "heroui-native";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   ScrollView,
   Switch,
   Text,
@@ -20,7 +21,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Uniwind, useUniwind } from "uniwind";
 
 interface UserProfile {
   id: string;
@@ -35,7 +35,6 @@ interface UserProfile {
 
 export default function Setting() {
   const { signOut, token, isLoading: authLoading } = useAuth();
-  const { theme } = useUniwind();
   const queryClient = useQueryClient();
   const { currentSong } = usePlayer();
   const { toast } = useToast();
@@ -136,17 +135,10 @@ export default function Setting() {
     );
   };
 
-  const toggleTheme = () => {
-    Uniwind.setTheme(theme === "light" ? "dark" : "light");
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
   if (authLoading) {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
-        <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#ff0000" />
-        </View>
+        <LoadingView />
       </SafeAreaView>
     );
   }
@@ -166,9 +158,7 @@ export default function Setting() {
   if (isLoading) {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
-        <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#ff0000" />
-        </View>
+        <LoadingView />
       </SafeAreaView>
     );
   }
@@ -263,8 +253,9 @@ export default function Setting() {
                     value={name}
                     onChangeText={setName}
                     placeholder="Enter your name"
-                    placeholderTextColor="#666"
-                    className="bg-background border border-border rounded-lg px-4 py-3 text-foreground"
+                    placeholderTextColor={AppColors.placeholder}
+                    style={{ color: AppColors.foreground }}
+                    className="bg-background border border-border rounded-lg px-4 py-3"
                   />
                 </View>
 
@@ -276,8 +267,9 @@ export default function Setting() {
                     value={avatarUrl}
                     onChangeText={setAvatarUrl}
                     placeholder="https://example.com/avatar.jpg"
-                    placeholderTextColor="#666"
-                    className="bg-background border border-border rounded-lg px-4 py-3 text-foreground"
+                    placeholderTextColor={AppColors.placeholder}
+                    style={{ color: AppColors.foreground }}
+                    className="bg-background border border-border rounded-lg px-4 py-3"
                   />
                 </View>
 
@@ -324,33 +316,12 @@ export default function Setting() {
               Preferences
             </Text>
 
-            <TouchableOpacity
-              onPress={toggleTheme}
-              className="flex-row items-center justify-between py-3 border-b border-border"
-            >
-              <View className="flex-row items-center flex-1">
-                <Ionicons
-                  name={theme === "dark" ? "moon" : "sunny"}
-                  size={20}
-                  color="#ff0000"
-                  style={{ marginRight: 12 }}
-                />
-                <Text className="text-foreground font-medium">Theme</Text>
-              </View>
-              <View className="flex-row items-center">
-                <Text className="text-muted-foreground mr-2">
-                  {theme === "dark" ? "Dark" : "Light"}
-                </Text>
-                <Ionicons name="chevron-forward" size={20} color="#666" />
-              </View>
-            </TouchableOpacity>
-
             <View className="flex-row items-center justify-between py-3 border-b border-border">
               <View className="flex-row items-center flex-1">
                 <Ionicons
                   name="notifications-outline"
                   size={20}
-                  color="#ff0000"
+                  color={AppColors.primary}
                   style={{ marginRight: 12 }}
                 />
                 <Text className="text-foreground font-medium">
@@ -362,8 +333,11 @@ export default function Setting() {
                 onValueChange={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
-                trackColor={{ false: "#3e3e3e", true: "#ff0000" }}
-                thumbColor="#fff"
+                trackColor={{
+                  false: AppColors.border,
+                  true: AppColors.primary,
+                }}
+                thumbColor={AppColors.foreground}
               />
             </View>
 
@@ -372,7 +346,7 @@ export default function Setting() {
                 <Ionicons
                   name="download-outline"
                   size={20}
-                  color="#ff0000"
+                  color={AppColors.primary}
                   style={{ marginRight: 12 }}
                 />
                 <Text className="text-foreground font-medium">
@@ -381,7 +355,11 @@ export default function Setting() {
               </View>
               <View className="flex-row items-center">
                 <Text className="text-muted-foreground mr-2">High</Text>
-                <Ionicons name="chevron-forward" size={20} color="#666" />
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={AppColors.mutedForeground}
+                />
               </View>
             </View>
           </Card>
@@ -533,24 +511,24 @@ export default function Setting() {
                 />
                 <Text className="text-foreground font-medium">Version</Text>
               </View>
-              <Text className="text-muted-foreground">1.0.0</Text>
+              <Text className="text-muted-foreground">1.0.1</Text>
             </View>
           </Card>
 
           {/* Sign Out Button */}
           <TouchableOpacity
             onPress={handleSignOut}
-            className="bg-destructive rounded-lg py-4 items-center mb-4"
+            className="bg-danger rounded-lg py-4 items-center mb-4"
             activeOpacity={0.7}
           >
             <View className="flex-row items-center">
               <Ionicons
                 name="log-out-outline"
                 size={20}
-                color="#fff"
+                color={AppColors.dangerForeground}
                 style={{ marginRight: 8 }}
               />
-              <Text className="text-white font-semibold text-base">
+              <Text className="text-danger-foreground font-semibold text-base">
                 Sign Out
               </Text>
             </View>
@@ -583,7 +561,7 @@ export default function Setting() {
               )}
               <Button
                 size="sm"
-                className={dialogConfig.isDestructive ? "bg-destructive" : ""}
+                className={dialogConfig.isDestructive ? "bg-danger" : ""}
                 onPress={() => {
                   dialogConfig.onConfirm?.();
                   setDialogConfig({ ...dialogConfig, isOpen: false });
@@ -614,7 +592,7 @@ function SettingRow({
         <Ionicons
           name={icon}
           size={20}
-          color="#ff0000"
+          color={AppColors.primary}
           style={{ marginRight: 12 }}
         />
         <Text className="text-foreground font-medium">{label}</Text>

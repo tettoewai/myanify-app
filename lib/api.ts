@@ -4,6 +4,9 @@ import { getApiBaseUrl } from "./env";
 
 const API_URL = getApiBaseUrl();
 
+const NETWORK_ERROR_MESSAGE =
+  "Unable to connect to Myanify. Check your internet connection and try again.";
+
 export const apiClient = {
   async fetch(endpoint: string, options: RequestInit = {}) {
     const token = await authStorage.getToken();
@@ -47,8 +50,7 @@ export const apiClient = {
         }
 
         if (errorData.message?.includes("Tunnel")) {
-          errorData.message =
-            "The API server is unreachable. Please ensure your backend is running and the API_URL in your .env file is correct.";
+          errorData.message = NETWORK_ERROR_MESSAGE;
         }
 
         // Only log non-auth errors
@@ -84,8 +86,7 @@ export const apiClient = {
         throw error;
       }
 
-      const helpfulMessage =
-        "The API server is unreachable. Please ensure your backend is running and the API_URL in your .env file is correct.";
+      const helpfulMessage = NETWORK_ERROR_MESSAGE;
 
       console.error("Network Fetch Error Details:", {
         message,

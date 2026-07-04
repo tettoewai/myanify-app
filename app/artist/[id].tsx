@@ -1,3 +1,4 @@
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import {
   StyledImage as Image,
@@ -19,7 +20,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, { useMemo, useRef } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Dimensions,
   StatusBar,
@@ -72,14 +72,11 @@ function ArtistDetailsScreen() {
   } = useLikeArtist();
   const router = useRouter();
   const {
-    playSong,
     playFromContext,
     currentSong: playingSong,
     isPlaying,
     setIsShuffled,
   } = usePlayer();
-  const [actionSong, setActionSong] = React.useState<Song | null>(null);
-
   const { isLikedSong, toggleLike } = useLikeSong();
   const insets = useSafeAreaInsets();
 
@@ -113,7 +110,7 @@ function ArtistDetailsScreen() {
   if (artistLoading) {
     return (
       <View className="flex-1 justify-center items-center bg-background">
-        <ActivityIndicator size="large" color="#ff0000" />
+        <LoadingSpinner size="lg" />
         <Text className="text-neutral-400 mt-4">Loading artist...</Text>
       </View>
     );
@@ -147,10 +144,6 @@ function ArtistDetailsScreen() {
     return (
       <TouchableOpacity
         onPress={() => handlePlaySong(item)}
-        onLongPress={() => {
-          setActionSong(item);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }}
         className={`flex-row items-center px-4 py-3 mx-2 mb-2 rounded-xl ${
           isCurrentSong ? "bg-neutral-900" : "bg-transparent"
         }`}
@@ -402,7 +395,7 @@ function ArtistDetailsScreen() {
               activeOpacity={0.8}
             >
               {isLikedArtistsLoading || isLiking || isUnliking ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <LoadingSpinner size="sm" color="#ffffff" />
               ) : (
                 <StyledIonicons
                   name={isLikedArtist(artist.id) ? "heart" : "heart-outline"}

@@ -1,7 +1,7 @@
+import { LoadingView } from "@/components/LoadingSpinner";
 import { useAuth } from "@/context/AuthContext";
 import { Redirect } from "expo-router";
 import type { ReactNode } from "react";
-import { ActivityIndicator, View } from "react-native";
 import { SignInPrompt } from "./SignInPrompt";
 
 interface RequireAuthProps {
@@ -14,11 +14,7 @@ export function RequireAuth({ children, inline = false }: RequireAuthProps) {
   const { token, isLoading } = useAuth();
 
   if (isLoading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator size="large" color="#ff0000" />
-      </View>
-    );
+    return <LoadingView />;
   }
 
   if (!token) {

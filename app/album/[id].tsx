@@ -1,3 +1,4 @@
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { SongActionSheet } from "@/components/SongActionSheet";
 import {
@@ -19,7 +20,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, { useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Dimensions,
   StatusBar,
@@ -127,7 +127,7 @@ function AlbumDetailsScreen() {
   if (albumLoading) {
     return (
       <View className="flex-1 justify-center items-center bg-background">
-        <ActivityIndicator size="large" color="#ff0000" />
+        <LoadingSpinner size="lg" />
         <Text className="text-neutral-400 mt-4">Loading album...</Text>
       </View>
     );
@@ -267,7 +267,10 @@ function AlbumDetailsScreen() {
   });
 
   return (
-    <View className="flex-1 bg-background" style={{ paddingBottom: insets.bottom }}>
+    <View
+      className="flex-1 bg-background"
+      style={{ paddingBottom: insets.bottom }}
+    >
       <StatusBar barStyle="light-content" />
 
       <Animated.View
@@ -304,7 +307,16 @@ function AlbumDetailsScreen() {
         )}
         <LinearGradient
           colors={["rgba(0,0,0,0.3)", "rgba(0,0,0,0.7)", "#000000"]}
-          className="absolute inset-0"
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+          }}
         />
       </Animated.View>
 
@@ -373,7 +385,11 @@ function AlbumDetailsScreen() {
 
           {releaseYear && (
             <View className="flex-row items-center mb-4">
-              <StyledIonicons name="calendar-outline" size={16} color="#a3a3a3" />
+              <StyledIonicons
+                name="calendar-outline"
+                size={16}
+                color="#a3a3a3"
+              />
               <Text className="text-neutral-400 text-sm ml-2 font-medium leading-loose">
                 Released {releaseYear}
               </Text>
@@ -397,11 +413,7 @@ function AlbumDetailsScreen() {
               }
               label="Duration"
             />
-            <StatCard
-              icon="disc"
-              value={typeLabel || "Release"}
-              label="Type"
-            />
+            <StatCard icon="disc" value={typeLabel || "Release"} label="Type" />
           </View>
 
           <View className="flex-row items-center gap-3 mb-6">

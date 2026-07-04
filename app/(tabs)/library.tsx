@@ -1,3 +1,4 @@
+import { LoadingSpinner, LoadingView } from "@/components/LoadingSpinner";
 import { SignInPrompt } from "@/components/auth/SignInPrompt";
 import {
   StyledImage as Image,
@@ -5,12 +6,13 @@ import {
 } from "@/components/styled";
 import { useAuth } from "@/context/AuthContext";
 import { useLibrary } from "@/hooks/useLibrary";
+import { AppColors } from "@/lib/colors";
 import { Artist, Playlist } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { Spinner, useToast } from "heroui-native";
+import { useToast } from "heroui-native";
 import { useMemo, useState } from "react";
 import {
   FlatList,
@@ -111,12 +113,13 @@ export default function Library() {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }}
           >
-            <LinearGradient
-              colors={["#ff6666", "#ff0000"]}
-              className="w-full aspect-square rounded-xl items-center justify-center shadow-lg"
-            >
-              <StyledIonicons name="heart" size={56} className="text-white" />
-            </LinearGradient>
+            <View className="w-full aspect-square items-center justify-center shadow-lg">
+              <StyledIonicons
+                name="heart"
+                size={56}
+                className="text-primary bg-primary/10 rounded-full p-2"
+              />
+            </View>
             <Text
               className="text-foreground font-bold text-base mt-2"
               numberOfLines={1}
@@ -138,12 +141,9 @@ export default function Library() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
         >
-          <LinearGradient
-            colors={["#ff6666", "#ff0000"]}
-            className="w-16 h-16 rounded-xl items-center justify-center mr-4 shadow"
-          >
-            <StyledIonicons name="heart" size={32} className="text-white" />
-          </LinearGradient>
+          <View className="w-16 h-16 rounded-xl items-center justify-center mr-4 shadow bg-primary/10">
+            <StyledIonicons name="heart" size={32} className="text-primary" />
+          </View>
           <View className="flex-1">
             <Text className="text-foreground font-bold text-lg">
               Liked Songs
@@ -306,7 +306,7 @@ export default function Library() {
     ) {
       return (
         <View className="flex-1 justify-center items-center">
-          <Spinner size="lg" color="#ff0000" />
+          <LoadingSpinner size="lg" />
         </View>
       );
     }
@@ -383,9 +383,7 @@ export default function Library() {
   if (authLoading) {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
-        <View className="flex-1 justify-center items-center">
-          <Spinner size="lg" color="#ff0000" />
-        </View>
+        <LoadingView />
       </SafeAreaView>
     );
   }
@@ -404,16 +402,17 @@ export default function Library() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["left", "right"]}>
-      <View className="px-4 pt-7">
+      <View className="px-4 pt-7 mt-10">
         {/* Header */}
         <View className="flex-row items-center justify-between mb-4">
           <View className="flex-row items-center">
-            <LinearGradient
-              colors={["#ff6666", "#ff0000"]}
-              className="w-10 h-10 rounded-full items-center justify-center mr-3 shadow"
-            >
-              <StyledIonicons name="library" size={22} className="text-white" />
-            </LinearGradient>
+            <View className="w-10 h-10 rounded-full items-center justify-center mr-3 shadow">
+              <StyledIonicons
+                name="library"
+                size={22}
+                className="text-primary"
+              />
+            </View>
             <Text className="text-3xl font-bold text-foreground">
               Your Library
             </Text>
@@ -497,9 +496,10 @@ export default function Library() {
             className="text-muted-foreground mr-3"
           />
           <TextInput
-            className="flex-1 text-foreground text-base"
+            className="flex-1 text-base"
+            style={{ color: AppColors.foreground }}
             placeholder={`Search ${activeTab}...`}
-            placeholderTextColor="#737373"
+            placeholderTextColor={AppColors.placeholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
@@ -626,11 +626,12 @@ export default function Library() {
                 <TextInput
                   onFocus={() => setIsInputFocused(true)}
                   onBlur={() => setIsInputFocused(false)}
-                  className={`w-full bg-card border-2 rounded-xl px-5 py-4 text-foreground text-lg ${
+                  className={`w-full bg-card border-2 rounded-xl px-5 py-4 text-lg ${
                     isInputFocused ? "border-primary" : "border-border"
                   }`}
+                  style={{ color: AppColors.foreground }}
                   placeholder="My awesome playlist"
-                  placeholderTextColor="#737373"
+                  placeholderTextColor={AppColors.placeholder}
                   value={newPlaylistName}
                   onChangeText={setNewPlaylistName}
                   autoFocus
@@ -662,7 +663,7 @@ export default function Library() {
                   }`}
                 >
                   {isCreatingPlaylist ? (
-                    <Spinner color="white" size="sm" />
+                    <LoadingSpinner size="sm" color="#ffffff" />
                   ) : (
                     <View className="flex-row items-center justify-center">
                       <StyledIonicons
