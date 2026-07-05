@@ -64,6 +64,7 @@
         }
       ],
       "expo-asset",
+      "expo-updates",
       [
         "@react-native-google-signin/google-signin",
         {
@@ -71,6 +72,12 @@
         }
       ]
     ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/1c232487-7c69-437f-a31a-8a8cd9bce061"
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

@@ -2,10 +2,13 @@ import Provider from "@/components/Providers";
 import { MiniPlayer } from "@/components/player/MiniPlayer";
 import { Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useUpdateCheck } from "@/hooks/useUpdateCheck";
+import { Text, TouchableOpacity, View } from "react-native";
 import "../global.css";
 import "@/lib/theme";
 
 export default function RootLayout() {
+  const { isUpdateAvailable, isDownloading, download } = useUpdateCheck();
   const segments = useSegments();
   const isAtBottom = ["artist", "album", "liked-songs", "see-all", "playlist"].some((s) =>
     (segments as string[]).includes(s)
@@ -13,6 +16,19 @@ export default function RootLayout() {
   return (
     <Provider>
       <StatusBar hidden />
+      {isUpdateAvailable ? (
+        <View className="px-4 pt-12 pb-2 bg-background">
+          <TouchableOpacity
+            disabled={isDownloading}
+            onPress={download}
+            className="bg-primary rounded-lg py-3 px-4 flex-row items-center justify-center"
+          >
+            <Text className="text-primary-foreground font-semibold text-sm">
+              {isDownloading ? "Downloading update..." : "Download & install update"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       <Stack
         screenOptions={{
           contentStyle: {
