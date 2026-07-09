@@ -12,15 +12,25 @@ export function useSearch(
   options?: { perPage?: number; enabled?: boolean },
 ) {
   const trimmed = query?.trim();
+  const limit = options?.perPage ?? 20;
 
   return useQuery<SearchResponse>({
-    queryKey: ["search", trimmed, options?.perPage],
+    queryKey: ["search", trimmed, limit],
     queryFn: async () => {
-      const params = new URLSearchParams({ q: trimmed! });
-      if (options?.perPage) {
-        params.set("per_page", String(options.perPage));
-      }
-      return apiClient.get(`/search?${params.toString()}`);
+      const params = new URLSearchParams({
+        search: trimmed!,
+        limit: String(limit),
+      });
+
+      const [songsRes, artistsRes] = await Promise.all([
+        apiClient.get(`/songs?${params}&isPublished=true`),
+        apiClient.get(`/artists?${params}`),
+      ]);
+
+      return {
+        songs: songsRes.data || [],
+        artists: artistsRes.data || [],
+      };
     },
     enabled: !!trimmed && (options?.enabled ?? true),
     staleTime: 60 * 1000,

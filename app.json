@@ -27,7 +27,8 @@
     },
     "android": {
       "permissions": [
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.REQUEST_INSTALL_PACKAGES"
       ],
       "userInterfaceStyle": "dark",
       "adaptiveIcon": {

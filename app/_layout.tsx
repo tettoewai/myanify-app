@@ -3,32 +3,52 @@ import { MiniPlayer } from "@/components/player/MiniPlayer";
 import { Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useUpdateCheck } from "@/hooks/useUpdateCheck";
-import { Text, TouchableOpacity, View } from "react-native";
+import { useApkUpdate } from "@/hooks/useApkUpdate";
+import { UpdateModal } from "@/components/UpdateModal";
+import { useEffect, useState } from "react";
 import "../global.css";
 import "@/lib/theme";
 
 export default function RootLayout() {
-  const { isUpdateAvailable, isDownloading, download } = useUpdateCheck();
+  const { isUpdateAvailable, isDownloading: otaDownloading, download: otaDownload } =
+    useUpdateCheck();
+  const {
+    apkUpdate,
+    isDownloading: apkDownloading,
+    downloadAndInstall,
+  } = useApkUpdate();
+  const [updateModalVisible, setUpdateModalVisible] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const segments = useSegments();
   const isAtBottom = ["artist", "album", "liked-songs", "see-all", "playlist"].some((s) =>
     (segments as string[]).includes(s)
   );
+
+  const apkAvailable = apkUpdate.available;
+  const showUpdate = apkAvailable || isUpdateAvailable;
+
+  useEffect(() => {
+    if (showUpdate && !dismissed) {
+      setUpdateModalVisible(true);
+    }
+  }, [showUpdate, dismissed]);
+
+  const handleInstall = () => {
+    if (apkAvailable) {
+      void downloadAndInstall();
+    } else if (isUpdateAvailable) {
+      void otaDownload();
+    }
+  };
+
+  const handleLater = () => {
+    setDismissed(true);
+    setUpdateModalVisible(false);
+  };
+
   return (
     <Provider>
       <StatusBar hidden />
-      {isUpdateAvailable ? (
-        <View className="px-4 pt-12 pb-2 bg-background">
-          <TouchableOpacity
-            disabled={isDownloading}
-            onPress={download}
-            className="bg-primary rounded-lg py-3 px-4 flex-row items-center justify-center"
-          >
-            <Text className="text-primary-foreground font-semibold text-sm">
-              {isDownloading ? "Downloading update..." : "Download & install update"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
       <Stack
         screenOptions={{
           contentStyle: {
@@ -69,6 +89,19 @@ export default function RootLayout() {
       </Stack>
 
       <MiniPlayer bottomOffset={isAtBottom ? 0 : undefined} />
+
+      {showUpdate ? (
+        <UpdateModal
+          visible={updateModalVisible}
+          kind={apkAvailable ? "apk" : "ota"}
+          version={apkUpdate.version}
+          notes={apkUpdate.notes}
+          mandatory={apkAvailable ? apkUpdate.mandatory : false}
+          isDownloading={apkAvailable ? apkDownloading : otaDownloading}
+          onInstall={handleInstall}
+          onLater={apkAvailable && apkUpdate.mandatory ? undefined : handleLater}
+        />
+      ) : null}
     </Provider>
   );
 }
