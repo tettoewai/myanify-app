@@ -14,6 +14,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const ACCENT = "#d4a574";
 
 export type UpdateKind = "apk" | "ota";
+export type DownloadStatus = "idle" | "downloading" | "complete" | "error";
+
+interface DownloadProgress {
+  totalBytes: number;
+  writtenBytes: number;
+  percent: number;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(i > 1 ? 1 : 0)} ${units[i]}`;
+}
 
 interface UpdateModalProps {
   visible: boolean;
@@ -22,6 +36,8 @@ interface UpdateModalProps {
   notes?: string;
   mandatory?: boolean;
   isDownloading?: boolean;
+  downloadStatus?: DownloadStatus;
+  downloadProgress?: DownloadProgress;
   error?: string | null;
   onInstall: () => void;
   onLater?: () => void;
@@ -35,6 +51,8 @@ export function UpdateModal({
   notes,
   mandatory = false,
   isDownloading = false,
+  downloadStatus = "idle",
+  downloadProgress,
   error,
   onInstall,
   onLater,
@@ -49,16 +67,23 @@ export function UpdateModal({
       ? `Update available (v${version ?? ""})`
       : "Update available";
 
-  const primaryLabel = isDownloading
-    ? "Preparing update..."
-    : kind === "apk"
-      ? "Download & install"
-      : "Update now";
+  const isActive = downloadStatus === "downloading" || isDownloading;
+  const isComplete = downloadStatus === "complete";
+
+  const primaryLabel = isComplete
+    ? "Install update"
+    : isActive
+      ? `${downloadProgress?.percent ?? 0}%`
+      : kind === "apk"
+        ? "Download & install"
+        : "Update now";
 
   const handleRequestClose = () => {
     if (mandatory) return;
     onLater?.();
   };
+
+  const showProgress = isActive && downloadProgress && downloadProgress.totalBytes > 0;
 
   return (
     <Modal
@@ -69,7 +94,7 @@ export function UpdateModal({
     >
       <Pressable
         className="flex-1 bg-black/50"
-        onPress={mandatory ? undefined : onLater}
+        onPress={mandatory && !isActive ? undefined : onLater}
       >
         <View className="flex-1" />
       </Pressable>
@@ -80,13 +105,17 @@ export function UpdateModal({
         <View className="w-10 h-1 bg-muted rounded-full self-center mb-4" />
 
         <View className="flex-row items-center gap-3 px-2 mb-2">
-          <Ionicons name="cloud-download-outline" size={24} color={ACCENT} />
+          <Ionicons
+            name={isComplete ? "checkmark-circle-outline" : "cloud-download-outline"}
+            size={24}
+            color={isComplete ? "#22c55e" : ACCENT}
+          />
           <Text className="text-lg font-semibold text-foreground leading-loose flex-1">
-            {title}
+            {isComplete ? "Download complete" : title}
           </Text>
         </View>
 
-        {notes ? (
+        {notes && !isActive && !isComplete ? (
           <Text
             className="text-sm text-muted-foreground mb-4 px-2 leading-loose"
             numberOfLines={6}
@@ -95,12 +124,15 @@ export function UpdateModal({
           </Text>
         ) : (
           <Text className="text-sm text-muted-foreground mb-4 px-2 leading-loose">
-            A new version is available. Update to get the latest features and
-            fixes.
+            {isComplete
+              ? "The update has been downloaded. Tap below to install."
+              : isActive
+                ? "Downloading in the background. You can close this dialog and continue using the app."
+                : "A new version is available. Update to get the latest features and fixes."}
           </Text>
         )}
 
-        {mandatory ? (
+        {mandatory && !isActive && !isComplete ? (
           <Text className="text-xs text-primary px-2 mb-3 leading-loose">
             This update is required to continue.
           </Text>
@@ -118,16 +150,55 @@ export function UpdateModal({
           </View>
         ) : null}
 
+        {showProgress ? (
+          <View className="px-2 mb-3">
+            <View className="h-2 bg-muted rounded-full overflow-hidden">
+              <View
+                className="h-full rounded-full"
+                style={{
+                  width: `${downloadProgress!.percent}%`,
+                  backgroundColor: ACCENT,
+                }}
+              />
+            </View>
+            <View className="flex-row justify-between mt-1.5">
+              <Text className="text-xs text-muted-foreground">
+                {formatBytes(downloadProgress!.writtenBytes)} / {formatBytes(downloadProgress!.totalBytes)}
+              </Text>
+              <Text className="text-xs text-muted-foreground font-medium">
+                {downloadProgress!.percent}%
+              </Text>
+            </View>
+          </View>
+        ) : isComplete ? (
+          <View className="px-2 mb-3">
+            <View className="flex-row items-center gap-2 bg-green-500/10 rounded-lg px-3 py-2">
+              <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
+              <Text className="text-xs text-green-600 dark:text-green-400">
+                {downloadProgress?.totalBytes
+                  ? `${formatBytes(downloadProgress.totalBytes)} downloaded`
+                  : "Download ready"}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
         <TouchableOpacity
-          disabled={isDownloading}
-          className="flex-row items-center justify-center gap-2 bg-primary rounded-lg py-3.5 px-4 mt-1"
+          disabled={isActive}
+          className={`flex-row items-center justify-center gap-2 rounded-lg py-3.5 px-4 mt-1 ${
+            isComplete
+              ? "bg-green-600"
+              : "bg-primary"
+          }`}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             onInstall();
           }}
         >
-          {isDownloading ? (
+          {isActive ? (
             <ActivityIndicator color="#000" />
+          ) : isComplete ? (
+            <Ionicons name="checkmark-outline" size={20} color="#000" />
           ) : (
             <Ionicons name="download-outline" size={20} color="#000" />
           )}
@@ -144,7 +215,9 @@ export function UpdateModal({
               onLater?.();
             }}
           >
-            <Text className="text-center text-muted-foreground">Later</Text>
+            <Text className="text-center text-muted-foreground">
+              {isActive ? "Continue in background" : "Later"}
+            </Text>
           </TouchableOpacity>
         ) : null}
       </View>

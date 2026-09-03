@@ -4,20 +4,18 @@ import type { AudioLockScreenOptions, AudioMetadata } from "expo-audio";
 import { useEffect, useRef } from "react";
 import { PermissionsAndroid, Platform } from "react-native";
 
-type LockScreenOptions = AudioLockScreenOptions & {
-  showNextTrack?: boolean;
-  showPreviousTrack?: boolean;
-};
-
-const LOCK_SCREEN_OPTIONS: LockScreenOptions = {
+const LOCK_SCREEN_OPTIONS: AudioLockScreenOptions = {
   showSeekForward: true,
   showSeekBackward: true,
   showNextTrack: true,
   showPreviousTrack: true,
+  showLikeAction: true,
+  seekIntervalMs: 10000,
 };
 
 const LOCK_SCREEN_NEXT = "lockScreenNext";
 const LOCK_SCREEN_PREVIOUS = "lockScreenPrevious";
+const LOCK_SCREEN_LIKE = "lockScreenLike";
 
 async function ensureAndroidNotificationPermission(): Promise<void> {
   if (Platform.OS !== "android" || Platform.Version < 33) return;
@@ -80,6 +78,7 @@ interface UseLockScreenPlayerOptions {
   isPlaying: boolean;
   onNext: () => void;
   onPrevious: () => void;
+  onLike: () => void;
 }
 
 /**
@@ -91,13 +90,16 @@ export function useLockScreenPlayer({
   isPlaying,
   onNext,
   onPrevious,
+  onLike,
 }: UseLockScreenPlayerOptions) {
   const activeSongIdRef = useRef<string | null>(null);
   const onNextRef = useRef(onNext);
   const onPreviousRef = useRef(onPrevious);
+  const onLikeRef = useRef(onLike);
 
   onNextRef.current = onNext;
   onPreviousRef.current = onPrevious;
+  onLikeRef.current = onLike;
 
   useEffect(() => {
     if (Platform.OS === "web" || !player?.addListener) return;
@@ -108,10 +110,14 @@ export function useLockScreenPlayer({
     const prevSub = player.addListener(LOCK_SCREEN_PREVIOUS, () => {
       onPreviousRef.current();
     });
+    const likeSub = player.addListener(LOCK_SCREEN_LIKE, () => {
+      onLikeRef.current();
+    });
 
     return () => {
       nextSub.remove();
       prevSub.remove();
+      likeSub.remove();
     };
   }, [player]);
 

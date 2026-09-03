@@ -18,6 +18,7 @@ import {
   type PersistedQueueEntry,
 } from "@/lib/queue";
 import { useLockScreenPlayer } from "@/hooks/useLockScreenPlayer";
+import { useLikeSong } from "@/hooks/useLikeSong";
 import { fetchSongLyrics } from "@/lib/song-lyrics";
 import type { LyricLine, QueueItem, QueueItemSource, Song } from "@/lib/types";
 import {
@@ -106,6 +107,7 @@ const PRELOAD_SECONDS_BEFORE_END = 15;
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const { token } = useAuth();
   const { toast } = useToast();
+  const { toggleLike } = useLikeSong();
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [currentSongLyrics, setCurrentSongLyrics] = useState<
     LyricLine[] | undefined
@@ -1303,6 +1305,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     isPlaying,
     onNext: nextSong,
     onPrevious: prevSong,
+    onLike: () => {
+      if (currentSong) {
+        toggleLike(currentSong);
+      }
+    },
   });
 
   const setQueueLegacy = useCallback(

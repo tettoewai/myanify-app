@@ -1,17 +1,18 @@
 diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/src/main/java/expo/modules/audio/AudioPlayer.kt
-index 320062e6217ddf28d290d3456fb037ea4a947a1d..6d188a792d14f7b0b41dc7b912ad30c32a542600 100644
+index 320062e6217ddf28d290d3456fb037ea4a947a1d..1f168d89b10a23ebdbc22eaf1b278f09ef416b3b 100644
 --- a/android/src/main/java/expo/modules/audio/AudioPlayer.kt
 +++ b/android/src/main/java/expo/modules/audio/AudioPlayer.kt
-@@ -32,6 +32,8 @@ import java.util.UUID
+@@ -32,6 +32,9 @@ import java.util.UUID
  
  private const val PLAYBACK_STATUS_UPDATE = "playbackStatusUpdate"
  private const val AUDIO_SAMPLE_UPDATE = "audioSampleUpdate"
 +private const val LOCK_SCREEN_NEXT = "lockScreenNext"
 +private const val LOCK_SCREEN_PREVIOUS = "lockScreenPrevious"
++private const val LOCK_SCREEN_LIKE = "lockScreenLike"
  private const val SEEK_JUMP_INTERVAL_MS: Long = 10_000
  
  @UnstableApi
-@@ -122,6 +124,14 @@ class AudioPlayer(
+@@ -122,6 +125,18 @@ class AudioPlayer(
      }
    }
  
@@ -23,14 +24,18 @@ index 320062e6217ddf28d290d3456fb037ea4a947a1d..6d188a792d14f7b0b41dc7b912ad30c3
 +    emit(LOCK_SCREEN_PREVIOUS, mapOf("id" to id))
 +  }
 +
++  fun emitLockScreenLike() {
++    emit(LOCK_SCREEN_LIKE, mapOf("id" to id))
++  }
++
    private fun startUpdating() {
      updateJob?.cancel()
      updateJob = flow {
 diff --git a/android/src/main/java/expo/modules/audio/AudioRecords.kt b/android/src/main/java/expo/modules/audio/AudioRecords.kt
-index 092af43b1c112008f324408f20b6737a184cbbce..10aae7062a2dd6f466f7d3f1f71fcf6c0534e834 100644
+index 092af43b1c112008f324408f20b6737a184cbbce..c50c13ce7e0be72e6b29e0df7f25e7c6980545f2 100644
 --- a/android/src/main/java/expo/modules/audio/AudioRecords.kt
 +++ b/android/src/main/java/expo/modules/audio/AudioRecords.kt
-@@ -93,8 +93,10 @@ enum class LockScreenButtons(val value: Int) : Enumerable {
+@@ -93,8 +93,12 @@ enum class LockScreenButtons(val value: Int) : Enumerable {
  }
  
  class AudioLockScreenOptions(
@@ -39,25 +44,83 @@ index 092af43b1c112008f324408f20b6737a184cbbce..10aae7062a2dd6f466f7d3f1f71fcf6c
 +  @Field val showSeekForward: Boolean = false,
 +  @Field val showSeekBackward: Boolean = false,
 +  @Field val showNextTrack: Boolean = false,
-+  @Field val showPreviousTrack: Boolean = false
++  @Field val showPreviousTrack: Boolean = false,
++  @Field val seekIntervalMs: Long = 10000,
++  @Field val showLikeAction: Boolean = false
  ) : Record
  
  enum class InterruptionMode(val value: String) : Enumerable {
 diff --git a/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..b56a0f778a0259cc004247edc910d7bf0a14db61 100644
+index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..9adbbefa2ebd71f0946c0796d51d0364e6977f67 100644
 --- a/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
 +++ b/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-@@ -68,6 +68,9 @@ class AudioControlsService : MediaSessionService() {
+@@ -9,6 +9,7 @@ import android.content.Intent
+ import android.content.pm.ServiceInfo
+ import android.graphics.Bitmap
+ import android.graphics.BitmapFactory
++import android.graphics.Color
+ import android.os.Binder
+ import android.os.Build
+ import android.os.Bundle
+@@ -28,3 +29,4 @@ import expo.modules.audio.AudioLockScreenOptions
+ import expo.modules.audio.AudioLockScreenOptions
+ import expo.modules.audio.AudioPlayer
+ import expo.modules.audio.Metadata
++import expo.modules.audio.R
+@@ -62,12 +63,18 @@ class AudioControlsService : MediaSessionService() {
+       }
+ 
+       ACTION_SEEK_FORWARD -> withPlayerOnAppThread { player ->
+-        player.seekTo(player.currentPosition + SEEK_INTERVAL_MS)
++        val interval = currentOptions?.seekIntervalMs ?: SEEK_INTERVAL_MS
++        player.seekTo(player.currentPosition + interval)
+       }
+ 
        ACTION_SEEK_BACKWARD -> withPlayerOnAppThread { player ->
-         player.seekTo(player.currentPosition - SEEK_INTERVAL_MS)
+-        player.seekTo(player.currentPosition - SEEK_INTERVAL_MS)
++        val interval = currentOptions?.seekIntervalMs ?: SEEK_INTERVAL_MS
++        player.seekTo(player.currentPosition - interval)
        }
 +
 +      ACTION_NEXT -> currentPlayer?.emitLockScreenNext()
 +      ACTION_PREVIOUS -> currentPlayer?.emitLockScreenPrevious()
++      ACTION_LIKE -> currentPlayer?.emitLockScreenLike()
      }
  
      // Ensure channel exists and update current notification
-@@ -136,6 +139,16 @@ class AudioControlsService : MediaSessionService() {
+@@ -91,13 +98,14 @@ class AudioControlsService : MediaSessionService() {
+     val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+       if (notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
+-        notificationManager.createNotificationChannel(
+-          NotificationChannel(
+-            CHANNEL_ID,
+-            CHANNEL_ID,
+-            NotificationManager.IMPORTANCE_LOW
+-          )
+-        )
++        val channel = NotificationChannel(
++          CHANNEL_ID,
++          "Music Playback",
++          NotificationManager.IMPORTANCE_LOW
++        ).apply {
++          description = "Media playback controls for Myanify"
++        }
++        notificationManager.createNotificationChannel(channel)
+       }
+     }
+   }
+@@ -116,7 +124,8 @@ class AudioControlsService : MediaSessionService() {
+     val session = mediaSession ?: return null
+ 
+     val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+-      .setSmallIcon(androidx.media3.session.R.drawable.media3_icon_circular_play)
++      .setSmallIcon(R.drawable.notification_icon)
++      .setColor(Color.parseColor("#FF0000"))
+       .setContentTitle(currentMetadata?.title ?: "\u200E")
+       .setContentText(currentMetadata?.artist)
+       .setSubText(currentMetadata?.albumTitle)
+@@ -136,6 +145,16 @@ class AudioControlsService : MediaSessionService() {
      val session = mediaSession ?: return
      val customLayout = mutableListOf<CommandButton>()
  
@@ -74,7 +137,7 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..b56a0f778a0259cc004247edc910d7bf
      // Add seek backward button if enabled
      if (currentOptions?.showSeekBackward == true) {
        customLayout.add(
-@@ -167,6 +180,16 @@ class AudioControlsService : MediaSessionService() {
+@@ -167,6 +186,26 @@ class AudioControlsService : MediaSessionService() {
        )
      }
  
@@ -88,10 +151,20 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..b56a0f778a0259cc004247edc910d7bf
 +      )
 +    }
 +
++    if (currentOptions?.showLikeAction == true) {
++      customLayout.add(
++        CommandButton.Builder(CommandButton.ICON_HEART_UNFILLED)
++          .setDisplayName("Like")
++          .setEnabled(true)
++          .setSessionCommand(SessionCommand(ACTION_LIKE, Bundle.EMPTY))
++          .build()
++      )
++    }
++
      session.setCustomLayout(customLayout)
    }
  
-@@ -331,6 +354,14 @@ class AudioControlsService : MediaSessionService() {
+@@ -331,6 +370,18 @@ class AudioControlsService : MediaSessionService() {
      currentPlayer = null
    }
  
@@ -103,32 +176,38 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..b56a0f778a0259cc004247edc910d7bf
 +    currentPlayer?.emitLockScreenPrevious()
 +  }
 +
++  fun emitLockScreenLike() {
++    currentPlayer?.emitLockScreenLike()
++  }
++
    companion object {
      private const val CHANNEL_ID = "expo_audio_channel"
      private const val ACTION_PLAY = "expo.modules.audio.action.PLAY"
-@@ -339,6 +370,8 @@ class AudioControlsService : MediaSessionService() {
+@@ -339,6 +390,9 @@ class AudioControlsService : MediaSessionService() {
  
      const val ACTION_SEEK_FORWARD = "expo.modules.audio.action.SEEK_FORWARD"
      const val ACTION_SEEK_BACKWARD = "expo.modules.audio.action.SEEK_REWIND"
 +    const val ACTION_NEXT = "expo.modules.audio.action.NEXT"
 +    const val ACTION_PREVIOUS = "expo.modules.audio.action.PREVIOUS"
++    const val ACTION_LIKE = "expo.modules.audio.action.LIKE"
  
      const val SEEK_INTERVAL_MS = 10000L
  
 diff --git a/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt b/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
-index 839aaef12d7699ea1a89037b31849775daa079f4..0dd34a6fe6fe2d4a2562438aa99fa392fa2cdab1 100644
+index 839aaef12d7699ea1a89037b31849775daa079f4..b99b68e01c9b01ecbd32feea5d0fa0a9f0009f39 100644
 --- a/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
 +++ b/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
-@@ -35,6 +35,8 @@ class AudioMediaSessionCallback : MediaSession.Callback {
+@@ -35,6 +35,9 @@ class AudioMediaSessionCallback : MediaSession.Callback {
            MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
              .add(SessionCommand(AudioControlsService.ACTION_SEEK_BACKWARD, Bundle.EMPTY))
              .add(SessionCommand(AudioControlsService.ACTION_SEEK_FORWARD, Bundle.EMPTY))
 +            .add(SessionCommand(AudioControlsService.ACTION_NEXT, Bundle.EMPTY))
 +            .add(SessionCommand(AudioControlsService.ACTION_PREVIOUS, Bundle.EMPTY))
++            .add(SessionCommand(AudioControlsService.ACTION_LIKE, Bundle.EMPTY))
              .build()
          )
          .build()
-@@ -56,6 +58,12 @@ class AudioMediaSessionCallback : MediaSession.Callback {
+@@ -56,6 +59,15 @@ class AudioMediaSessionCallback : MediaSession.Callback {
        AudioControlsService.ACTION_SEEK_BACKWARD -> {
          session.player.seekTo(session.player.currentPosition - AudioControlsService.SEEK_INTERVAL_MS)
        }
@@ -138,23 +217,70 @@ index 839aaef12d7699ea1a89037b31849775daa079f4..0dd34a6fe6fe2d4a2562438aa99fa392
 +      AudioControlsService.ACTION_PREVIOUS -> {
 +        AudioControlsService.getInstance()?.emitLockScreenPrevious()
 +      }
++      AudioControlsService.ACTION_LIKE -> {
++        AudioControlsService.getInstance()?.emitLockScreenLike()
++      }
      }
      return super.onCustomCommand(session, controller, command, args)
    }
+diff --git a/android/src/main/res/drawable/notification_icon.xml b/android/src/main/res/drawable/notification_icon.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..89d2d7a5b9df437e32af63b1559f04a0d8a61bb3
+--- /dev/null
++++ b/android/src/main/res/drawable/notification_icon.xml
+@@ -0,0 +1,10 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24"
++    android:tint="#FFFFFF">
++    <path
++        android:fillColor="@android:color/white"
++        android:pathData="M12,3v10.55c-0.59,-0.34 -1.27,-0.55 -2,-0.55c-2.21,0 -4,1.79 -4,4s1.79,4 4,4 4,-1.79 4,-4V7h4V3H12z"/>
++</vector>
+diff --git a/build/AudioConstants.d.ts b/build/AudioConstants.d.ts
+index a290f9aed8224d89cca6361c102d26b24feaa2ce..0554535fb3aac49987f8e527bc10b32fc153ad77 100644
+--- a/build/AudioConstants.d.ts
++++ b/build/AudioConstants.d.ts
+@@ -10,5 +10,21 @@ export type AudioLockScreenOptions = {
+      * Whether the seek backward button should be displayed on the lock screen.
+      */
+     showSeekBackward?: boolean;
++    /**
++     * Whether the next track button should be displayed on the lock screen.
++     */
++    showNextTrack?: boolean;
++    /**
++     * Whether the previous track button should be displayed on the lock screen.
++     */
++    showPreviousTrack?: boolean;
++    /**
++     * Seek interval in milliseconds for seek forward/backward buttons. Defaults to 10000 (10 seconds).
++     */
++    seekIntervalMs?: number;
++    /**
++     * Whether the like/heart button should be displayed on the lock screen.
++     */
++    showLikeAction?: boolean;
+ };
+ //# sourceMappingURL=AudioConstants.d.ts.map
+\ No newline at end of file
 diff --git a/ios/AudioPlayer.swift b/ios/AudioPlayer.swift
-index 1dbce0997fc2746a4c60a91e34101c0e83e7bd0d..f02a1df07d18eff986c14cd4b65037e46ff2052e 100644
+index 1dbce0997fc2746a4c60a91e34101c0e83e7bd0d..f988a684734031cd5c9c2c71cd13d8b83eeae9f6 100644
 --- a/ios/AudioPlayer.swift
 +++ b/ios/AudioPlayer.swift
-@@ -4,6 +4,8 @@ import Combine
+@@ -4,6 +4,9 @@ import Combine
  private enum AudioConstants {
    static let playbackStatus = "playbackStatusUpdate"
    static let audioSample = "audioSampleUpdate"
 +  static let lockScreenNext = "lockScreenNext"
 +  static let lockScreenPrevious = "lockScreenPrevious"
++  static let lockScreenLike = "lockScreenLike"
  }
  
  public class AudioPlayer: SharedRef<AVPlayer> {
-@@ -334,4 +336,12 @@ public class AudioPlayer: SharedRef<AVPlayer> {
+@@ -334,4 +337,16 @@ public class AudioPlayer: SharedRef<AVPlayer> {
  
      ref.pause()
    }
@@ -166,25 +292,49 @@ index 1dbce0997fc2746a4c60a91e34101c0e83e7bd0d..f02a1df07d18eff986c14cd4b65037e4
 +  func handleLockScreenPrevious() {
 +    self.emit(event: AudioConstants.lockScreenPrevious, arguments: [:])
 +  }
++
++  func handleLockScreenLike() {
++    self.emit(event: AudioConstants.lockScreenLike, arguments: [:])
++  }
  }
 diff --git a/ios/AudioRecords.swift b/ios/AudioRecords.swift
-index f1759cd75b8b369156352e0f7431ee3d302dd131..9709990d83c00eb363bbd3a420e3f24d4856fdbf 100644
+index f1759cd75b8b369156352e0f7431ee3d302dd131..3c9777fadf41b629eec605b4c0f714668a36b19e 100644
 --- a/ios/AudioRecords.swift
 +++ b/ios/AudioRecords.swift
-@@ -56,6 +56,8 @@ struct Metadata: Record {
+@@ -56,6 +56,10 @@ struct Metadata: Record {
  struct LockScreenOptions: Record {
    @Field var showSeekForward: Bool = false
    @Field var showSeekBackward: Bool = false
 +  @Field var showNextTrack: Bool = false
 +  @Field var showPreviousTrack: Bool = false
++  @Field var showLikeAction: Bool = false
++  @Field var seekIntervalMs: Double = 10000
  }
  
  enum BitRateStrategy: String, Enumerable {
 diff --git a/ios/MediaController.swift b/ios/MediaController.swift
-index 2dd3fb2e5f2fe7446d064a6fbfacecef381cd94d..9002894052c7f7e5517910fba33b2a6dce344138 100644
+index 2dd3fb2e5f2fe7446d064a6fbfacecef381cd94d..8099e7a8b5720235856d321fc79137c66fc558e6 100644
 --- a/ios/MediaController.swift
 +++ b/ios/MediaController.swift
-@@ -200,6 +200,16 @@ class MediaController {
+@@ -173,7 +173,7 @@ class MediaController {
+       return .success
+     }
+ 
+-    remoteCommandCenter.skipForwardCommand.preferredIntervals = [10.0]
++    remoteCommandCenter.skipForwardCommand.preferredIntervals = [interval(options)]
+     remoteCommandCenter.skipForwardCommand.addTarget { [weak self] event in
+       guard let player = self?.activePlayer,
+       let event = event as? MPSkipIntervalCommandEvent else {
+@@ -187,7 +187,7 @@ class MediaController {
+       return .success
+     }
+ 
+-    remoteCommandCenter.skipBackwardCommand.preferredIntervals = [10.0]
++    remoteCommandCenter.skipBackwardCommand.preferredIntervals = [interval(options)]
+     remoteCommandCenter.skipBackwardCommand.addTarget { [weak self] event in
+       guard let player = self?.activePlayer,
+       let event = event as? MPSkipIntervalCommandEvent else {
+@@ -200,6 +200,21 @@ class MediaController {
  
        return .success
      }
@@ -198,32 +348,69 @@ index 2dd3fb2e5f2fe7446d064a6fbfacecef381cd94d..9002894052c7f7e5517910fba33b2a6d
 +      self?.activePlayer?.handleLockScreenPrevious()
 +      return .success
 +    }
++    
++    remoteCommandCenter.likeCommand.addTarget { [weak self] _ in
++      self?.activePlayer?.handleLockScreenLike()
++      return .success
++    }
      
      remoteCommandCenter.playCommand.isEnabled = true
      remoteCommandCenter.pauseCommand.isEnabled = true
-@@ -207,6 +217,8 @@ class MediaController {
+@@ -207,6 +222,9 @@ class MediaController {
      remoteCommandCenter.changePlaybackPositionCommand.isEnabled = true
      remoteCommandCenter.skipForwardCommand.isEnabled = options?.showSeekForward ?? false
      remoteCommandCenter.skipBackwardCommand.isEnabled = options?.showSeekBackward ?? false
 +    remoteCommandCenter.nextTrackCommand.isEnabled = options?.showNextTrack ?? false
 +    remoteCommandCenter.previousTrackCommand.isEnabled = options?.showPreviousTrack ?? false
++    remoteCommandCenter.likeCommand.isEnabled = options?.showLikeAction ?? false
    }
  
    private func disableRemoteCommands() {
-@@ -216,6 +228,8 @@ class MediaController {
+@@ -216,6 +234,9 @@ class MediaController {
      remoteCommandCenter.changePlaybackPositionCommand.isEnabled = false
      remoteCommandCenter.skipForwardCommand.isEnabled = false
      remoteCommandCenter.skipBackwardCommand.isEnabled = false
 +    remoteCommandCenter.nextTrackCommand.isEnabled = false
 +    remoteCommandCenter.previousTrackCommand.isEnabled = false
++    remoteCommandCenter.likeCommand.isEnabled = false
      
      // Remove event targets
      remoteCommandCenter.playCommand.removeTarget(self);
-@@ -224,5 +238,7 @@ class MediaController {
+@@ -224,5 +245,12 @@ class MediaController {
      remoteCommandCenter.changePlaybackPositionCommand.removeTarget(self);
      remoteCommandCenter.skipForwardCommand.removeTarget(self);
      remoteCommandCenter.skipBackwardCommand.removeTarget(self);
 +    remoteCommandCenter.nextTrackCommand.removeTarget(self);
 +    remoteCommandCenter.previousTrackCommand.removeTarget(self);
++    remoteCommandCenter.likeCommand.removeTarget(self);
++  }
++
++  private func interval(_ options: LockScreenOptions?) -> Double {
++    return (options?.seekIntervalMs ?? 10000) / 1000.0
    }
  }
+diff --git a/src/AudioConstants.ts b/src/AudioConstants.ts
+index 72a157c4efd88465ff6d5d203181d50acfb055ff..09ded9f25e3e12f57c8fc378495964beefce47d4 100644
+--- a/src/AudioConstants.ts
++++ b/src/AudioConstants.ts
+@@ -11,4 +11,20 @@ export type AudioLockScreenOptions = {
+    * Whether the seek backward button should be displayed on the lock screen.
+    */
+   showSeekBackward?: boolean;
++  /**
++   * Whether the next track button should be displayed on the lock screen.
++   */
++  showNextTrack?: boolean;
++  /**
++   * Whether the previous track button should be displayed on the lock screen.
++   */
++  showPreviousTrack?: boolean;
++  /**
++   * Seek interval in milliseconds for seek forward/backward buttons. Defaults to 10000 (10 seconds).
++   */
++  seekIntervalMs?: number;
++  /**
++   * Whether the like/heart button should be displayed on the lock screen.
++   */
++  showLikeAction?: boolean;
+ };

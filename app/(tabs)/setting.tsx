@@ -33,6 +33,15 @@ interface UserProfile {
   hasPassword: boolean;
 }
 
+interface SongRequest {
+  id: string;
+  songTitle: string;
+  artistName: string;
+  notes: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  createdAt: string;
+}
+
 export default function Setting() {
   const { signOut, token, isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
@@ -120,6 +129,61 @@ export default function Setting() {
   const handleSaveProfile = () => {
     updateProfileMutation.mutate({ name, avatarUrl });
   };
+
+  // Song request form state
+  const [requestSongTitle, setRequestSongTitle] = useState("");
+  const [requestArtistName, setRequestArtistName] = useState("");
+  const [requestNotes, setRequestNotes] = useState("");
+
+  // Fetch song requests
+  const { data: songRequestsData, refetch: refetchRequests } = useQuery<{
+    data: SongRequest[];
+  }>({
+    queryKey: ["song-requests"],
+    queryFn: () => apiClient.get("/song-requests"),
+    enabled: !!token,
+  });
+
+  // Submit song request mutation
+  const submitRequestMutation = useMutation({
+    mutationFn: (data: { songTitle: string; artistName: string; notes?: string }) =>
+      apiClient.post("/song-requests", data),
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      toast.show({
+        label: "Song request submitted!",
+        variant: "success",
+      });
+      setRequestSongTitle("");
+      setRequestArtistName("");
+      setRequestNotes("");
+      refetchRequests();
+    },
+    onError: (error: any) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      toast.show({
+        label: error.message || "Failed to submit request",
+        variant: "danger",
+      });
+    },
+  });
+
+  const handleSubmitSongRequest = () => {
+    if (!requestSongTitle.trim() || !requestArtistName.trim()) {
+      toast.show({
+        label: "Song title and artist name are required",
+        variant: "danger",
+      });
+      return;
+    }
+    submitRequestMutation.mutate({
+      songTitle: requestSongTitle.trim(),
+      artistName: requestArtistName.trim(),
+      notes: requestNotes.trim() || undefined,
+    });
+  };
+
+  const songRequests = songRequestsData?.data || [];
 
   const handleSignOut = () => {
     showDialog(
@@ -445,6 +509,113 @@ export default function Setting() {
               </View>
               <Ionicons name="chevron-forward" size={20} color="#666" />
             </TouchableOpacity>
+          </Card>
+
+          {/* Song Requests Section */}
+          <Card className="mb-4 p-4 bg-card border border-border">
+            <Text className="text-lg font-bold text-foreground mb-4">
+              Song Requests
+            </Text>
+
+            <View className="mb-4">
+              <Text className="text-foreground font-medium mb-2">
+                Song Title *
+              </Text>
+              <TextInput
+                value={requestSongTitle}
+                onChangeText={setRequestSongTitle}
+                placeholder="e.g. မနှင်းဆီ"
+                placeholderTextColor={AppColors.placeholder}
+                style={{ color: AppColors.foreground }}
+                className="bg-background border border-border rounded-lg px-4 py-3"
+              />
+            </View>
+
+            <View className="mb-4">
+              <Text className="text-foreground font-medium mb-2">
+                Artist Name *
+              </Text>
+              <TextInput
+                value={requestArtistName}
+                onChangeText={setRequestArtistName}
+                placeholder="e.g. လွှမ်းမိုး"
+                placeholderTextColor={AppColors.placeholder}
+                style={{ color: AppColors.foreground }}
+                className="bg-background border border-border rounded-lg px-4 py-3"
+              />
+            </View>
+
+            <View className="mb-4">
+              <Text className="text-foreground font-medium mb-2">
+                Notes (optional)
+              </Text>
+              <TextInput
+                value={requestNotes}
+                onChangeText={setRequestNotes}
+                placeholder="YouTube link, version, etc."
+                placeholderTextColor={AppColors.placeholder}
+                style={{ color: AppColors.foreground }}
+                className="bg-background border border-border rounded-lg px-4 py-3"
+              />
+            </View>
+
+            <Button
+              onPress={handleSubmitSongRequest}
+              isDisabled={
+                submitRequestMutation.isPending ||
+                !requestSongTitle.trim() ||
+                !requestArtistName.trim()
+              }
+              className="w-full"
+            >
+              <Button.Label>
+                {submitRequestMutation.isPending ? "Submitting..." : "Submit Request"}
+              </Button.Label>
+            </Button>
+
+            {songRequests.length > 0 && (
+              <View className="mt-4 pt-4 border-t border-border">
+                <Text className="text-foreground font-medium mb-3">
+                  Your Requests
+                </Text>
+                {songRequests.map((request) => (
+                  <View
+                    key={request.id}
+                    className="flex-row items-center justify-between py-3 border-b border-border last:border-b-0"
+                  >
+                    <View className="flex-1 mr-3">
+                      <Text className="text-foreground font-medium" numberOfLines={1}>
+                        {request.songTitle}
+                      </Text>
+                      <Text className="text-muted-foreground text-sm" numberOfLines={1}>
+                        {request.artistName}
+                      </Text>
+                    </View>
+                    <View
+                      className={`px-2 py-1 rounded-full ${
+                        request.status === "PENDING"
+                          ? "bg-amber-500/20"
+                          : request.status === "APPROVED"
+                            ? "bg-emerald-500/20"
+                            : "bg-danger/20"
+                      }`}
+                    >
+                      <Text
+                        className={`text-xs font-medium ${
+                          request.status === "PENDING"
+                            ? "text-amber-500"
+                            : request.status === "APPROVED"
+                              ? "text-emerald-500"
+                              : "text-danger"
+                        }`}
+                      >
+                        {request.status.charAt(0) + request.status.slice(1).toLowerCase()}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
           </Card>
 
           {/* About Section */}

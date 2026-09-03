@@ -15,11 +15,11 @@ export default function RootLayout() {
     isDownloading: otaDownloading,
     download: otaDownload,
     downloadError: otaDownloadError,
-    checkError: otaCheckError,
   } = useUpdateCheck();
   const {
     apkUpdate,
-    isDownloading: apkDownloading,
+    downloadStatus,
+    downloadProgress,
     downloadAndInstall,
     error: apkError,
     clearError: clearApkError,
@@ -35,9 +35,17 @@ export default function RootLayout() {
   const showUpdate = apkAvailable || isUpdateAvailable;
   const isMandatory = apkAvailable ? apkUpdate.mandatory : false;
 
+  // Keep modal visible while APK download is active, even if user dismissed
+  const isDownloadingApk = downloadStatus === "downloading";
+  const isDownloadComplete = downloadStatus === "complete";
+
   // Dismissal is scoped to a specific versionCode — a new version re-shows the modal
   const isDismissedForThisVersion =
-    !isMandatory && dismissedVersionCode !== null && dismissedVersionCode === apkUpdate.versionCode;
+    !isMandatory &&
+    !isDownloadingApk &&
+    !isDownloadComplete &&
+    dismissedVersionCode !== null &&
+    dismissedVersionCode === apkUpdate.versionCode;
 
   // Reset dismissal when a newer versionCode arrives
   useEffect(() => {
@@ -54,34 +62,40 @@ export default function RootLayout() {
     }
   }, [showUpdate, isDismissedForThisVersion, apkError]);
 
-  // Surface APK download errors even if dismissed – user needs to see failure
+  // Surface APK download errors even if dismissed
   useEffect(() => {
     if (apkError) {
       setUpdateModalVisible(true);
     }
   }, [apkError]);
 
-  // Auto-clear stale OTA check errors that appear without an actual update
-  // (e.g. EAS channel header errors should not trigger modal)
+  // Re-show modal when background download completes
+  useEffect(() => {
+    if (isDownloadComplete) {
+      setUpdateModalVisible(true);
+    }
+  }, [isDownloadComplete]);
 
   const handleInstall = () => {
     if (apkAvailable) {
       void downloadAndInstall();
     } else if (isUpdateAvailable) {
-      void otaDownload().catch(() => {
-        // Error surfaced via downloadError state
-      });
+      void otaDownload().catch(() => {});
     }
   };
 
   const handleLater = () => {
     if (!isMandatory) {
-      setDismissedVersionCode(apkUpdate.versionCode);
-      setUpdateModalVisible(false);
+      if (isDownloadingApk) {
+        // Let download continue in background — just hide modal
+        setUpdateModalVisible(false);
+      } else {
+        setDismissedVersionCode(apkUpdate.versionCode);
+        setUpdateModalVisible(false);
+      }
     }
   };
 
-  // Only surface OTA download errors when an OTA is actually available; ignore checkError noise
   const combinedError = apkAvailable
     ? apkError
     : isUpdateAvailable
@@ -139,7 +153,9 @@ export default function RootLayout() {
           version={apkUpdate.version}
           notes={apkUpdate.notes}
           mandatory={isMandatory}
-          isDownloading={apkAvailable ? apkDownloading : otaDownloading}
+          isDownloading={apkAvailable ? isDownloadingApk : otaDownloading}
+          downloadStatus={downloadStatus}
+          downloadProgress={downloadProgress}
           error={combinedError}
           onInstall={handleInstall}
           onLater={isMandatory ? undefined : handleLater}
