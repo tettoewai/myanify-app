@@ -1,7 +1,7 @@
 {
   "name": "myanify",
   "main": "expo-router/entry",
-  "version": "1.0.1",
+  "version": "1.0.5",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -67,6 +67,13 @@
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
+  },
+  "expo": {
+    "autolinking": {
+      "buildFromSource": [
+        "expo-audio"
+      ]
+    }
   },
   "private": true
 }

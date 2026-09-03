@@ -10,15 +10,22 @@ import "../global.css";
 import "@/lib/theme";
 
 export default function RootLayout() {
-  const { isUpdateAvailable, isDownloading: otaDownloading, download: otaDownload } =
-    useUpdateCheck();
+  const {
+    isUpdateAvailable,
+    isDownloading: otaDownloading,
+    download: otaDownload,
+    downloadError: otaDownloadError,
+    checkError: otaCheckError,
+  } = useUpdateCheck();
   const {
     apkUpdate,
     isDownloading: apkDownloading,
     downloadAndInstall,
+    error: apkError,
+    clearError: clearApkError,
   } = useApkUpdate();
   const [updateModalVisible, setUpdateModalVisible] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissedVersionCode, setDismissedVersionCode] = useState<number | null>(null);
   const segments = useSegments();
   const isAtBottom = ["artist", "album", "liked-songs", "see-all", "playlist"].some((s) =>
     (segments as string[]).includes(s)
@@ -26,25 +33,52 @@ export default function RootLayout() {
 
   const apkAvailable = apkUpdate.available;
   const showUpdate = apkAvailable || isUpdateAvailable;
+  const isMandatory = apkAvailable ? apkUpdate.mandatory : false;
+
+  // Dismissal is scoped to a specific versionCode — a new version re-shows the modal
+  const isDismissedForThisVersion =
+    !isMandatory && dismissedVersionCode !== null && dismissedVersionCode === apkUpdate.versionCode;
+
+  // Reset dismissal when a newer versionCode arrives
+  useEffect(() => {
+    if (apkAvailable && dismissedVersionCode !== null && apkUpdate.versionCode > dismissedVersionCode) {
+      setDismissedVersionCode(null);
+    }
+  }, [apkAvailable, apkUpdate.versionCode, dismissedVersionCode]);
 
   useEffect(() => {
-    if (showUpdate && !dismissed) {
+    if (showUpdate && !isDismissedForThisVersion) {
+      setUpdateModalVisible(true);
+    } else if (!showUpdate) {
+      setUpdateModalVisible(false);
+    }
+  }, [showUpdate, isDismissedForThisVersion]);
+
+  // Also surface errors even if update was dismissed — ensure modal shows on error
+  useEffect(() => {
+    if (apkError || otaDownloadError || otaCheckError) {
       setUpdateModalVisible(true);
     }
-  }, [showUpdate, dismissed]);
+  }, [apkError, otaDownloadError, otaCheckError]);
 
   const handleInstall = () => {
     if (apkAvailable) {
       void downloadAndInstall();
     } else if (isUpdateAvailable) {
-      void otaDownload();
+      void otaDownload().catch(() => {
+        // Error surfaced via downloadError state
+      });
     }
   };
 
   const handleLater = () => {
-    setDismissed(true);
-    setUpdateModalVisible(false);
+    if (!isMandatory) {
+      setDismissedVersionCode(apkUpdate.versionCode);
+      setUpdateModalVisible(false);
+    }
   };
+
+  const combinedError = apkAvailable ? apkError : (otaDownloadError?.message ?? otaCheckError?.message ?? null);
 
   return (
     <Provider>
@@ -90,16 +124,18 @@ export default function RootLayout() {
 
       <MiniPlayer bottomOffset={isAtBottom ? 0 : undefined} />
 
-      {showUpdate ? (
+      {showUpdate || combinedError ? (
         <UpdateModal
           visible={updateModalVisible}
           kind={apkAvailable ? "apk" : "ota"}
           version={apkUpdate.version}
           notes={apkUpdate.notes}
-          mandatory={apkAvailable ? apkUpdate.mandatory : false}
+          mandatory={isMandatory}
           isDownloading={apkAvailable ? apkDownloading : otaDownloading}
+          error={combinedError}
           onInstall={handleInstall}
-          onLater={apkAvailable && apkUpdate.mandatory ? undefined : handleLater}
+          onLater={isMandatory ? undefined : handleLater}
+          onDismissError={apkAvailable ? clearApkError : undefined}
         />
       ) : null}
     </Provider>

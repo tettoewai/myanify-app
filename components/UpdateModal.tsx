@@ -22,8 +22,10 @@ interface UpdateModalProps {
   notes?: string;
   mandatory?: boolean;
   isDownloading?: boolean;
+  error?: string | null;
   onInstall: () => void;
   onLater?: () => void;
+  onDismissError?: () => void;
 }
 
 export function UpdateModal({
@@ -33,8 +35,10 @@ export function UpdateModal({
   notes,
   mandatory = false,
   isDownloading = false,
+  error,
   onInstall,
   onLater,
+  onDismissError,
 }: UpdateModalProps) {
   const insets = useSafeAreaInsets();
 
@@ -51,12 +55,17 @@ export function UpdateModal({
       ? "Download & install"
       : "Update now";
 
+  const handleRequestClose = () => {
+    if (mandatory) return;
+    onLater?.();
+  };
+
   return (
     <Modal
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={onLater}
+      onRequestClose={handleRequestClose}
     >
       <Pressable
         className="flex-1 bg-black/50"
@@ -95,6 +104,18 @@ export function UpdateModal({
           <Text className="text-xs text-primary px-2 mb-3 leading-loose">
             This update is required to continue.
           </Text>
+        ) : null}
+
+        {error ? (
+          <View className="flex-row items-start gap-2 bg-destructive/10 rounded-lg px-3 py-2.5 mb-3">
+            <Ionicons name="alert-circle-outline" size={16} color="#ef4444" style={{ marginTop: 2 }} />
+            <Text className="flex-1 text-xs text-destructive leading-relaxed">{error}</Text>
+            {onDismissError ? (
+              <Pressable onPress={onDismissError} className="p-1 -mr-1">
+                <Ionicons name="close" size={16} color="#ef4444" />
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
 
         <TouchableOpacity

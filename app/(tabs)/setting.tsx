@@ -539,7 +539,9 @@ export default function Setting() {
       {/* Generic Dialog */}
       <Dialog
         isOpen={dialogConfig.isOpen}
-        onOpenChange={(isOpen) => setDialogConfig({ ...dialogConfig, isOpen })}
+        onOpenChange={(isOpen) =>
+          setDialogConfig((prev) => ({ ...prev, isOpen }))
+        }
       >
         <Dialog.Portal>
           <Dialog.Overlay />
@@ -553,18 +555,29 @@ export default function Setting() {
             </View>
             <View className="flex-row justify-end gap-3">
               {dialogConfig.cancelText && (
-                <Dialog.Close asChild>
-                  <Button variant="ghost" size="sm">
-                    <Button.Label>{dialogConfig.cancelText}</Button.Label>
-                  </Button>
-                </Dialog.Close>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onPress={() =>
+                    setDialogConfig((prev) => ({ ...prev, isOpen: false }))
+                  }
+                >
+                  <Button.Label>{dialogConfig.cancelText}</Button.Label>
+                </Button>
               )}
               <Button
                 size="sm"
                 className={dialogConfig.isDestructive ? "bg-danger" : ""}
                 onPress={() => {
-                  dialogConfig.onConfirm?.();
-                  setDialogConfig({ ...dialogConfig, isOpen: false });
+                  const action = dialogConfig.onConfirm;
+                  setDialogConfig((prev) => ({ ...prev, isOpen: false }));
+                  if (action) {
+                    // Delay action to let Dialog exit animation finish.
+                    // Without this, signOut() triggers router.replace("/") and
+                    // unmounts this screen while Reanimated is still animating
+                    // the Dialog, causing "Cannot find host instance" crash.
+                    setTimeout(() => action(), 200);
+                  }
                 }}
               >
                 <Button.Label>{dialogConfig.confirmText || "OK"}</Button.Label>

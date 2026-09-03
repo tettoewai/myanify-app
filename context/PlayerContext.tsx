@@ -156,6 +156,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const userDisabledRadioRef = useRef(false);
   const currentSongRef = useRef<Song | null>(null);
   const upNextRef = useRef<QueueItem[]>([]);
+  const currentTimeRef = useRef(0);
 
   const loadSource = useCallback(
     (uri: string) => {
@@ -192,6 +193,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     currentSongRef.current = currentSong;
   }, [currentSong]);
+
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
 
   const persistUserUpNext = useCallback(async (items: QueueItem[]) => {
     try {
@@ -381,9 +386,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   // ===== FIXED LYRICS LOGIC START =====
 
-  // Reset lyrics state when song changes
+  // Reset lyrics state when song changes — with TTL for empty entries
+  const LYRICS_TTL_MS = 5 * 60 * 1000;
+  const lyricsFetchedAtRef = useRef<Map<string, number>>(new Map());
+  const isLyricsCacheValid = useCallback(
+    (id: string, lyrics: LyricLine[] | undefined) => {
+      if (lyrics === undefined) return false;
+      if (lyrics.length > 0) return true;
+      const fetchedAt = lyricsFetchedAtRef.current.get(id) ?? 0;
+      return Date.now() - fetchedAt < LYRICS_TTL_MS;
+    },
+    [],
+  );
+
   useEffect(() => {
-    // Reset request flag
     setLyricsRequested(false);
     setIsLoadingLyrics(false);
 
@@ -392,61 +408,58 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Check cache first
     const cached = lyricsCacheRef.current.get(currentSong.id);
-    if (cached !== undefined) {
+    if (cached !== undefined && isLyricsCacheValid(currentSong.id, cached)) {
       setCurrentSongLyrics(cached);
       return;
     }
+    if (cached !== undefined && !isLyricsCacheValid(currentSong.id, cached)) {
+      lyricsCacheRef.current.delete(currentSong.id);
+      lyricsFetchedAtRef.current.delete(currentSong.id);
+    }
 
-    // Check if lyrics are embedded in the song object
     if (currentSong.lyrics !== undefined && currentSong.lyrics.length > 0) {
       lyricsCacheRef.current.set(currentSong.id, currentSong.lyrics);
+      lyricsFetchedAtRef.current.set(currentSong.id, Date.now());
+      setCurrentSongLyrics(currentSong.lyrics);
+      return;
+    }
+    if (currentSong.lyrics !== undefined && currentSong.lyrics.length === 0) {
+      // Explicit empty from API — cache with TTL
+      lyricsCacheRef.current.set(currentSong.id, []);
+      lyricsFetchedAtRef.current.set(currentSong.id, Date.now());
+      setCurrentSongLyrics([]);
+      return;
+    }
+
+    setCurrentSongLyrics(undefined);
+  }, [currentSong?.id, (currentSong as unknown as { lyrics?: unknown })?.lyrics, isLyricsCacheValid]);
+
+  const requestCurrentSongLyrics = useCallback(() => {
+    if (!currentSong) return;
+
+    const cached = lyricsCacheRef.current.get(currentSong.id);
+    if (cached !== undefined && isLyricsCacheValid(currentSong.id, cached)) {
+      setCurrentSongLyrics(cached);
+      return;
+    }
+    if (cached !== undefined && !isLyricsCacheValid(currentSong.id, cached)) {
+      lyricsCacheRef.current.delete(currentSong.id);
+      lyricsFetchedAtRef.current.delete(currentSong.id);
+    }
+    if (currentSong.lyrics !== undefined && currentSong.lyrics.length > 0) {
       setCurrentSongLyrics(currentSong.lyrics);
       return;
     }
 
-    // Clear lyrics for new song (will fetch when requested)
-    setCurrentSongLyrics(undefined);
-  }, [currentSong?.id, currentSong?.lyrics]);
-
-  // Fetch lyrics when requested
-  const requestCurrentSongLyrics = useCallback(() => {
-    if (!currentSong) {
-      return;
-    }
-
-    // Check if we already have lyrics
-    if (currentSongLyrics !== undefined && currentSongLyrics.length > 0) {
-      return;
-    }
-
-    // Check cache
-    const cached = lyricsCacheRef.current.get(currentSong.id);
-    if (cached !== undefined && cached.length > 0) {
-      setCurrentSongLyrics(cached);
-      return;
-    }
-
     setLyricsRequested(true);
-  }, [currentSong, currentSongLyrics]);
+  }, [currentSong?.id, currentSong?.lyrics, isLyricsCacheValid]);
 
-  // Actually fetch lyrics when requested
   useEffect(() => {
-    // Check if we should fetch
-    if (!currentSong || !lyricsRequested) {
-      return;
-    }
+    if (!currentSong || !lyricsRequested) return;
 
-    // Check if we already have lyrics
-    if (currentSongLyrics !== undefined && currentSongLyrics.length > 0) {
-      setLyricsRequested(false); // Reset the flag
-      return;
-    }
-
-    // Check cache again (in case it was populated after the check)
     const cached = lyricsCacheRef.current.get(currentSong.id);
-    if (cached !== undefined && cached.length > 0) {
+    if (cached !== undefined && isLyricsCacheValid(currentSong.id, cached)) {
       setCurrentSongLyrics(cached);
       setLyricsRequested(false);
       return;
@@ -459,26 +472,26 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       .then((lyrics) => {
         if (cancelled) return;
         lyricsCacheRef.current.set(currentSong.id, lyrics);
+        lyricsFetchedAtRef.current.set(currentSong.id, Date.now());
         setCurrentSongLyrics(lyrics);
-        setLyricsRequested(false); // Reset the flag
+        setLyricsRequested(false);
       })
       .catch((err) => {
         if (cancelled) return;
         console.error("❌ Failed to fetch lyrics:", err);
         lyricsCacheRef.current.set(currentSong.id, []);
+        lyricsFetchedAtRef.current.set(currentSong.id, Date.now());
         setCurrentSongLyrics([]);
-        setLyricsRequested(false); // Reset the flag
+        setLyricsRequested(false);
       })
       .finally(() => {
-        if (!cancelled) {
-          setIsLoadingLyrics(false);
-        }
+        if (!cancelled) setIsLoadingLyrics(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [currentSong?.id, lyricsRequested, currentSongLyrics]);
+  }, [currentSong?.id, lyricsRequested, isLyricsCacheValid]);
 
   // ===== FIXED LYRICS LOGIC END =====
 
@@ -717,29 +730,35 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [currentTime, duration, currentSong, upNext]);
 
   useEffect(() => {
-    if (isPlaying && currentSong && currentTime > 0) {
+    if (isPlaying && currentSong) {
       if (positionSaveIntervalRef.current) {
         clearInterval(positionSaveIntervalRef.current);
       }
       positionSaveIntervalRef.current = setInterval(() => {
-        if (currentSong && currentTime > 0) {
-          void savePlaybackPosition(currentSong.id, currentTime);
+        const song = currentSongRef.current;
+        const t = currentTimeRef.current;
+        if (song && t > 0) {
+          void savePlaybackPosition(song.id, t);
         }
       }, POSITION_SAVE_INTERVAL);
       return () => {
         if (positionSaveIntervalRef.current) {
           clearInterval(positionSaveIntervalRef.current);
+          positionSaveIntervalRef.current = null;
         }
       };
     }
-    if (currentSong && currentTime > 0) {
-      void savePlaybackPosition(currentSong.id, currentTime);
+    // Save on pause/stop
+    const song = currentSongRef.current;
+    const t = currentTimeRef.current;
+    if (song && t > 0) {
+      void savePlaybackPosition(song.id, t);
     }
     if (positionSaveIntervalRef.current) {
       clearInterval(positionSaveIntervalRef.current);
       positionSaveIntervalRef.current = null;
     }
-  }, [isPlaying, currentSong, currentTime]);
+  }, [isPlaying, currentSong?.id]);
 
   // Only react to native status changes — not optimistic isPlaying updates from
   // togglePlay, which would briefly revert the UI before status.playing catches up.
@@ -757,40 +776,27 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [repeatMode, player]);
 
-  // To this:
   useEffect(() => {
     if (status.duration > 0 && !isSeekingRef.current) {
       setDuration(status.duration);
     }
 
-    // Always update current time, but don't overwrite during seeking
-    // Only update if not seeking OR if the time is close to what we expect
-    if (status.currentTime !== undefined) {
-      // If we're seeking, only update if the new time is within 5 seconds of our target
-      if (isSeekingRef.current) {
-        // Don't update during seeking to prevent UI flicker
-        return;
-      }
+    if (status.currentTime !== undefined && !isSeekingRef.current) {
       setCurrentTime(status.currentTime);
     }
 
-    // Handle buffering
     setIsLoading(isResolvingSource || status.isBuffering);
+  }, [status.duration, status.currentTime, status.isBuffering, isResolvingSource]);
 
-    // Handle finish
+  // Handle finish separately so seeking doesn't block it
+  useEffect(() => {
     if (status.didJustFinish) {
       if (currentSongRef.current) {
         void savePlaybackPosition(currentSongRef.current.id, 0);
       }
       advanceToNextRef.current();
     }
-  }, [
-    status.duration,
-    status.currentTime,
-    status.isBuffering,
-    status.didJustFinish,
-    isResolvingSource,
-  ]);
+  }, [status.didJustFinish]);
 
   const savePlaybackPosition = async (songId: string, timestamp: number) => {
     try {
@@ -1136,117 +1142,32 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Clamp time to valid range
       const clampedTime = Math.max(0, Math.min(time, duration || 0));
-
-      // Set seeking flag
       isSeekingRef.current = true;
 
       try {
-        // Check if this is a "far seek" (> 20 seconds away from current position)
-        const currentPos = status.currentTime || 0;
-        const isFarSeek = Math.abs(clampedTime - currentPos) > 20;
-
-        // Store if we were playing
         const wasPlaying = isPlaying;
+        player.seekTo(clampedTime);
+        setCurrentTime(clampedTime);
 
-        if (isFarSeek) {
-          // For far seeks, the best approach is to reload the audio source
-          // with the seek position as a query parameter
-          const song = currentSongRef.current;
-          if (!song) {
-            // Fallback to regular seek
-            player.seekTo(clampedTime);
-            setTimeout(() => {
-              isSeekingRef.current = false;
-            }, 150);
-            return;
+        if (wasPlaying && !player.playing) {
+          try {
+            player.play();
+          } catch (err) {
+            console.error("Failed to resume playback after seek:", err);
           }
-
-          // Get the stream URL with a seek parameter
-          const streamUrl = getSongStreamUrl(song);
-          if (!streamUrl) {
-            player.seekTo(clampedTime);
-            setTimeout(() => {
-              isSeekingRef.current = false;
-            }, 150);
-            return;
-          }
-
-          // Pause first
-          if (wasPlaying) {
-            try {
-              player.pause();
-            } catch (e) {
-              // Ignore
-            }
-          }
-
-          // Create a new URL with a timestamp to force reload
-          const urlWithSeek = `${streamUrl}${streamUrl.includes("?") ? "&" : "?"}seek=${Math.floor(clampedTime)}&t=${Date.now()}`;
-
-          // Resolve the new URI and reload
-          resolvePlayableAudioUri(urlWithSeek)
-            .then((newUri) => {
-              loadSource(newUri);
-
-              // Store the position to seek to after reload
-              restorePositionRef.current = clampedTime;
-
-              // Reset player ready state
-              playerReadyRef.current = false;
-              shouldAutoPlayRef.current = wasPlaying;
-
-              // Update UI immediately
-              setCurrentTime(clampedTime);
-
-              // Reset seeking flag after a delay
-              setTimeout(() => {
-                isSeekingRef.current = false;
-              }, 500);
-            })
-            .catch((err) => {
-              console.error("Failed to reload audio for far seek:", err);
-              // Fallback: try regular seek
-              player.seekTo(clampedTime);
-              if (wasPlaying) {
-                setTimeout(() => {
-                  try {
-                    player.play();
-                  } catch (e) {
-                    console.error("Failed to resume after fallback seek:", e);
-                  }
-                }, 100);
-              }
-              setTimeout(() => {
-                isSeekingRef.current = false;
-              }, 150);
-            });
-        } else {
-          // For near seeks, do it directly
-          player.seekTo(clampedTime);
-          setCurrentTime(clampedTime);
-
-          // If player was playing, ensure it continues playing
-          if (wasPlaying && !player.playing) {
-            try {
-              player.play();
-            } catch (err) {
-              console.error("Failed to resume playback after near seek:", err);
-            }
-          }
-
-          setTimeout(() => {
-            isSeekingRef.current = false;
-          }, 150);
         }
+
+        setTimeout(() => {
+          isSeekingRef.current = false;
+        }, 150);
       } catch (err) {
         console.error("❌ Seek error:", err);
         setError("Failed to seek to position");
         isSeekingRef.current = false;
       }
     },
-    [player, duration, isPlaying, status.currentTime, loadSource],
+    [player, duration, isPlaying],
   );
 
   const nextSong = useCallback(() => {

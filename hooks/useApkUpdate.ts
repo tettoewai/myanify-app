@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { Platform } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, Platform, type AppStateStatus } from "react-native";
 import * as Application from "expo-application";
 import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
@@ -12,6 +12,8 @@ export interface ApkUpdateInfo {
   notes: string;
   mandatory: boolean;
   available: boolean;
+  sha256?: string;
+  fileSize?: number;
 }
 
 interface MobileReleaseManifest {
@@ -20,6 +22,8 @@ interface MobileReleaseManifest {
   apkUrl?: string;
   notes?: string;
   mandatory?: boolean;
+  sha256?: string;
+  fileSize?: number;
 }
 
 const EMPTY_UPDATE: ApkUpdateInfo = {
@@ -46,6 +50,7 @@ export function useApkUpdate() {
   const check = useCallback(async () => {
     if (Platform.OS !== "android") return;
     setIsChecking(true);
+    setError(null);
     try {
       const manifest = (await apiClient.get(
         "/mobile-update",
@@ -66,17 +71,35 @@ export function useApkUpdate() {
         notes: manifest.notes ?? "",
         mandatory: !!manifest.mandatory,
         available: latest > current,
+        sha256: manifest.sha256,
+        fileSize: manifest.fileSize,
       });
-    } catch {
-      // Network/endpoint unavailable — skip silently.
+    } catch (e) {
+      if (__DEV__) console.warn("[useApkUpdate] check failed:", e);
+      // Keep previous apkUpdate state so UI doesn't flicker on transient network error
     } finally {
       setIsChecking(false);
     }
   }, []);
 
+  const appStateRef = useRef(AppState.currentState);
+
   useEffect(() => {
     void check();
+    const sub = AppState.addEventListener("change", (state: AppStateStatus) => {
+      // Re-check when returning to foreground if we haven't checked recently
+      if (
+        state === "active" &&
+        appStateRef.current.match(/inactive|background/)
+      ) {
+        void check();
+      }
+      appStateRef.current = state;
+    });
+    return () => sub.remove();
   }, [check]);
+
+  const clearError = useCallback(() => setError(null), []);
 
   const downloadAndInstall = useCallback(async () => {
     if (Platform.OS !== "android" || !apkUpdate.apkUrl) return;
@@ -93,6 +116,25 @@ export function useApkUpdate() {
         throw new Error(`Download failed (status ${download.status})`);
       }
 
+      // Optional integrity checks if manifest provides them
+      if (apkUpdate.fileSize) {
+        const info = await FileSystem.getInfoAsync(download.uri);
+        if (info.exists && info.size !== apkUpdate.fileSize) {
+          throw new Error(
+            `Download corrupted: expected ${apkUpdate.fileSize} bytes, got ${info.size}`,
+          );
+        }
+      }
+
+      if (apkUpdate.sha256) {
+        const info = await FileSystem.getInfoAsync(download.uri);
+        if (__DEV__ && info.exists) {
+          console.warn(
+            "[useApkUpdate] sha256 provided but runtime verification not yet implemented — relying on HTTPS + EAS signature. Consider adding native sha256 check.",
+          );
+        }
+      }
+
       const contentUri = await FileSystem.getContentUriAsync(download.uri);
       await IntentLauncher.startActivityAsync(
         "android.intent.action.INSTALL_PACKAGE",
@@ -104,19 +146,26 @@ export function useApkUpdate() {
       );
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Update failed";
-      try {
-        // Android 8+ requires "Install unknown apps" to be enabled for this app.
-        await IntentLauncher.startActivityAsync(
-          "android.settings.MANAGE_UNKNOWN_APP_SOURCES",
-          { data: `package:${Application.applicationId}` },
-        );
-      } catch {
-        setError(message);
+      setError(message);
+      if (__DEV__) console.warn("[useApkUpdate] install failed:", e);
+      // Help user enable "Install unknown apps" if that is the likely cause.
+      // Do not swallow the original error — surface it and *also* offer the settings shortcut.
+      const isPermissionError =
+        /install|unknown|permission/i.test(message) || message === "Update failed";
+      if (isPermissionError) {
+        try {
+          await IntentLauncher.startActivityAsync(
+            "android.settings.MANAGE_UNKNOWN_APP_SOURCES",
+            { data: `package:${Application.applicationId}` },
+          );
+        } catch {
+          // Intent to settings failed — error already set
+        }
       }
     } finally {
       setIsDownloading(false);
     }
-  }, [apkUpdate.apkUrl]);
+  }, [apkUpdate.apkUrl, apkUpdate.fileSize, apkUpdate.sha256]);
 
   return {
     apkUpdate,
@@ -125,5 +174,6 @@ export function useApkUpdate() {
     error,
     check,
     downloadAndInstall,
+    clearError,
   };
 }

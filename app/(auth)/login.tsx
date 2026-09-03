@@ -73,6 +73,16 @@ export default function Login() {
           "Unable to connect to Myanify. Check your internet connection and try again.";
       }
 
+      if (errorMessage === "EMAIL_NOT_VERIFIED") {
+        errorMessage =
+          "Your email has not been verified yet. Please check your inbox and verify your email before signing in.";
+      } else if (errorMessage === "Invalid credentials") {
+        errorMessage = "Incorrect email or password. Please try again.";
+      } else if (errorMessage === "Internal server error") {
+        errorMessage =
+          "Something went wrong on our end. Please try again shortly.";
+      }
+
       const statusCode = error.response?.status;
       toast.show({
         variant: "danger",

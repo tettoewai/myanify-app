@@ -11,18 +11,22 @@ export function formatLyricsFromApi(lyrics: any): LyricLine[] | undefined {
     "time" in lyrics[0] &&
     "text" in lyrics[0]
   ) {
-    return lyrics.map((line: any) => ({
-      time: line.time ?? 0,
-      text: line.text ?? "",
-    }));
+    return [...lyrics]
+      .sort((a: any, b: any) => (a.time ?? 0) - (b.time ?? 0))
+      .map((line: any) => ({
+        time: line.time ?? 0,
+        text: line.text ?? "",
+      }));
   }
 
   const linesRow = lyrics[0];
   if (linesRow?.lines && Array.isArray(linesRow.lines)) {
-    return linesRow.lines.map((line: any) => ({
-      time: line.time ?? 0,
-      text: line.text ?? "",
-    }));
+    return [...linesRow.lines]
+      .sort((a: any, b: any) => (a.time ?? 0) - (b.time ?? 0))
+      .map((line: any) => ({
+        time: line.time ?? 0,
+        text: line.text ?? "",
+      }));
   }
 
   return [];
