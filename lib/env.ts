@@ -4,6 +4,7 @@ type AppExtra = {
   apiUrl?: string;
   appUrl?: string;
   cloudinaryCloudName?: string;
+  vercelBypassToken?: string;
 };
 
 const extra = (Constants.expoConfig?.extra ?? {}) as AppExtra;
@@ -37,4 +38,11 @@ export function getCloudinaryCloudName(): string {
     "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME",
     "cloudinaryCloudName",
   );
+}
+
+export function getVercelBypassToken(): string | null {
+  const v =
+    process.env.EXPO_PUBLIC_VERCEL_BYPASS_TOKEN ||
+    (Constants.expoConfig?.extra as AppExtra)?.vercelBypassToken;
+  return v?.trim() ? v.trim() : null;
 }

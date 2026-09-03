@@ -12,11 +12,17 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function optionalEnv(name: string): string | undefined {
+  const v = process.env[name]?.trim();
+  return v ? v : undefined;
+}
+
 /** Mirror .env into expo.extra for native builds and Constants access. */
 export default ({ config }: ConfigContext): ExpoConfig => {
   const apiUrl = requireEnv("EXPO_PUBLIC_API_URL").replace(/\/$/, "");
   const appUrl = requireEnv("EXPO_PUBLIC_APP_URL").replace(/\/$/, "");
   const cloudinaryCloudName = requireEnv("EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME");
+  const vercelBypassToken = optionalEnv("EXPO_PUBLIC_VERCEL_BYPASS_TOKEN");
 
   return {
     ...config,
@@ -25,6 +31,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       apiUrl,
       appUrl,
       cloudinaryCloudName,
+      ...(vercelBypassToken ? { vercelBypassToken } : {}),
     },
   } as ExpoConfig;
 };

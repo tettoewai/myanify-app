@@ -1,6 +1,6 @@
 import { authStorage } from "./auth-storage";
 import { notifyUnauthorized } from "./auth-session";
-import { getApiBaseUrl } from "./env";
+import { getApiBaseUrl, getVercelBypassToken } from "./env";
 
 const API_URL = getApiBaseUrl();
 
@@ -20,6 +20,8 @@ export const apiClient = {
       throw new Error("API configuration missing");
     }
 
+    const vercelBypass = getVercelBypassToken();
+
     // Helper to do fetch with one transient retry for Neon cold-start / Vercel warm-up (500/502/503/504)
     const doFetch = async (retry = 0): Promise<Response> => {
       const res = await fetch(`${API_URL}${cleanEndpoint}`, {
@@ -27,6 +29,12 @@ export const apiClient = {
         headers: {
           "Content-Type": "application/json",
           "bypass-tunnel-reminder": "true",
+          ...(vercelBypass
+            ? {
+                "x-vercel-protection-bypass": vercelBypass,
+                "x-vercel-set-bypass-cookie": "true",
+              }
+            : {}),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...options.headers,
         },
@@ -57,19 +65,36 @@ export const apiClient = {
           const lower = responseText.toLowerCase();
           const isVercelProtection =
             lower.includes("authentication required") ||
-            lower.includes("deployment protection");
+            lower.includes("deployment protection") ||
+            lower.includes("security checkpoint") ||
+            (lower.includes("vercel") && lower.includes("challenge")) ||
+            lower.includes("attack challenge") ||
+            response.headers.get("x-vercel-mitigated") === "challenge" ||
+            response.headers.get("server") === "Vercel" && lower.includes("challenge");
           if (isHtml) {
             if (response.status === 403 && isVercelProtection) {
               errorData = {
-                message: `Access denied by deployment protection (403): ${endpoint} – check Vercel protection bypass`,
+                message: `Access denied by Vercel Security Checkpoint (403): ${endpoint} – public API blocked, add x-vercel-protection-bypass or disable Attack Challenge in Vercel dashboard`,
               };
             } else if (response.status === 403 || response.status === 401) {
-              errorData = {
-                message:
-                  response.status === 403
-                    ? `Access denied (403): ${endpoint} – token missing/expired or not admin`
-                    : `Unauthorized (401): ${endpoint} – please sign in again`,
-              };
+              // /home is public – 403 there is never token-related, treat as protection
+              const isPublicRoute =
+                cleanEndpoint === "/home" ||
+                cleanEndpoint.startsWith("/songs") ||
+                cleanEndpoint.startsWith("/genres") ||
+                cleanEndpoint.startsWith("/mobile-update");
+              if (isPublicRoute && response.status === 403) {
+                errorData = {
+                  message: `Access denied by Vercel Security Checkpoint (403): ${endpoint} – public route blocked`,
+                };
+              } else {
+                errorData = {
+                  message:
+                    response.status === 403
+                      ? `Access denied (403): ${endpoint} – token missing/expired or not admin`
+                      : `Unauthorized (401): ${endpoint} – please sign in again`,
+                };
+              }
             } else {
               errorData = {
                 message: `Server returned HTML (status ${response.status}): ${endpoint}`,
