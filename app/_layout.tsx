@@ -49,17 +49,20 @@ export default function RootLayout() {
   useEffect(() => {
     if (showUpdate && !isDismissedForThisVersion) {
       setUpdateModalVisible(true);
-    } else if (!showUpdate) {
+    } else if (!showUpdate && !apkError) {
       setUpdateModalVisible(false);
     }
-  }, [showUpdate, isDismissedForThisVersion]);
+  }, [showUpdate, isDismissedForThisVersion, apkError]);
 
-  // Also surface errors even if update was dismissed — ensure modal shows on error
+  // Surface APK download errors even if dismissed – user needs to see failure
   useEffect(() => {
-    if (apkError || otaDownloadError || otaCheckError) {
+    if (apkError) {
       setUpdateModalVisible(true);
     }
-  }, [apkError, otaDownloadError, otaCheckError]);
+  }, [apkError]);
+
+  // Auto-clear stale OTA check errors that appear without an actual update
+  // (e.g. EAS channel header errors should not trigger modal)
 
   const handleInstall = () => {
     if (apkAvailable) {
@@ -78,7 +81,12 @@ export default function RootLayout() {
     }
   };
 
-  const combinedError = apkAvailable ? apkError : (otaDownloadError?.message ?? otaCheckError?.message ?? null);
+  // Only surface OTA download errors when an OTA is actually available; ignore checkError noise
+  const combinedError = apkAvailable
+    ? apkError
+    : isUpdateAvailable
+      ? (otaDownloadError?.message ?? null)
+      : null;
 
   return (
     <Provider>
