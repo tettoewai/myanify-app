@@ -29,6 +29,9 @@ export const apiClient = {
         headers: {
           "Content-Type": "application/json",
           "bypass-tunnel-reminder": "true",
+          // Matches Vercel firewall rule "Bypass /api/* for mobile app" (user_agent contains Mobile)
+          "User-Agent": "Myanify Mobile",
+          "x-myanify-mobile": "true",
           ...(vercelBypass
             ? {
                 "x-vercel-protection-bypass": vercelBypass,
