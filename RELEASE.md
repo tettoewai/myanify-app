@@ -36,13 +36,23 @@ Existing installs pick this up automatically via `expo-updates` — no new APK n
 
 ## Releasing a new APK (binary update)
 
-> Note: `eas.json` uses `"appVersionSource": "remote"`, so EAS controls `version`/`versionCode`.
-> Read the built `versionCode` from the EAS build output and use it below.
+> `eas.json` uses `"appVersionSource": "local"` + `"credentialsSource": "local"`,
+> so `app.json` `version`/`versionCode` are honored and the APK is signed with
+> `credentials.json` → `android/app/debug.keystore` (same key as all prior
+> releases — required for in-place updates; a different key causes
+> "App not installed as package appears to be invalid").
+> Bump `app.json` (+ `package.json`) manually before building.
 
-1. Build the standalone APK:
+1. Build the standalone APK locally:
    ```bash
    cd myanify-app
-   pnpm build:android-apk        # eas build --platform android --profile production-apk
+   eas build --platform android --profile production-apk --local \
+     --output /tmp/myanify_<version>_<code>.apk --non-interactive
+   ```
+   Verify before uploading:
+   ```bash
+   aapt dump badging /tmp/myanify_*.apk | head -n 1   # versionCode must be > previous
+   apksigner verify --print-certs /tmp/myanify_*.apk  # SHA-256 must match previous release
    ```
 2. Upload the APK to Cloudinary (prints the hosted URL):
    ```bash
