@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 3.0.0",
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -14,13 +14,14 @@
       "channel": "preview"
     },
     "production": {
-      "autoIncrement": true,
+      "autoIncrement": false,
       "node": "22.14.0",
       "pnpm": "9.15.9",
       "channel": "production"
     },
     "production-apk": {
       "extends": "production",
+      "credentialsSource": "local",
       "channel": "production",
       "android": {
         "buildType": "apk"
