@@ -11,6 +11,7 @@ import { useLikeSong } from "@/hooks/useLikeSong";
 import { apiClient } from "@/lib/api";
 import { formatSongFromApi } from "@/lib/song-format";
 import { getSongCoverUrl } from "@/lib/song-cover";
+import { shareEntity } from "@/lib/share";
 import { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -122,6 +123,10 @@ function AlbumDetailsScreen() {
       void playFromContext(shuffled[0], shuffled, "playlist");
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+  };
+
+  const handleShare = () => {
+    void shareEntity("album", album, { title: album.name });
   };
 
   if (albumLoading) {
@@ -345,7 +350,10 @@ function AlbumDetailsScreen() {
             >
               {album.name}
             </Animated.Text>
-            <TouchableOpacity className="w-10 h-10 items-center justify-center rounded-full bg-black/50">
+            <TouchableOpacity
+              onPress={handleShare}
+              className="w-10 h-10 items-center justify-center rounded-full bg-black/50"
+            >
               <StyledIonicons
                 name="share-social-outline"
                 size={20}
@@ -439,6 +447,7 @@ function AlbumDetailsScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
+              onPress={handleShare}
               className="bg-neutral-800 rounded-full p-4"
               activeOpacity={0.8}
             >

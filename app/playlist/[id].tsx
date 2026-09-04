@@ -12,6 +12,7 @@ import { apiClient } from "@/lib/api";
 import { AppColors } from "@/lib/colors";
 import { formatSongFromApi } from "@/lib/song-format";
 import { getSongCoverUrl } from "@/lib/song-cover";
+import { shareEntity } from "@/lib/share";
 import { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -106,6 +107,10 @@ function PlaylistDetailsScreen() {
       void playFromContext(songs[0], songs, "playlist");
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+  };
+
+  const handleShare = () => {
+    void shareEntity("playlist", playlist, { title: playlist.name });
   };
 
   const handlePlaySong = (song: Song) => {
@@ -489,6 +494,7 @@ function PlaylistDetailsScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
+              onPress={handleShare}
               className="bg-neutral-800 rounded-full p-4"
               activeOpacity={0.8}
             >

@@ -1,4 +1,5 @@
 import { usePlayer } from "@/context/PlayerContext";
+import { shareEntity } from "@/lib/share";
 import type { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -55,6 +56,14 @@ export function SongActionSheet({
       icon: "radio" as const,
       onPress: () => {
         startRadio(song);
+        onClose();
+      },
+    },
+    {
+      label: "Share",
+      icon: "share-social-outline" as const,
+      onPress: () => {
+        void shareEntity("song", song, { title: song.title });
         onClose();
       },
     },

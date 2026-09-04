@@ -5,6 +5,7 @@ import { AppState, type AppStateStatus } from "react-native";
 export function useUpdateCheck() {
   const {
     currentlyRunning,
+    availableUpdate,
     isUpdateAvailable,
     isUpdatePending,
     isChecking,
@@ -28,7 +29,7 @@ export function useUpdateCheck() {
     try {
       await checkForUpdateAsync();
     } catch (error) {
-      if (__DEV__) console.warn("[useUpdateCheck] check failed:", error);
+      console.warn("[useUpdateCheck] check failed:", error);
     } finally {
       isCheckingRef.current = false;
     }
@@ -38,7 +39,7 @@ export function useUpdateCheck() {
     try {
       await fetchUpdateAsync();
     } catch (error) {
-      if (__DEV__) console.warn("[useUpdateCheck] download failed:", error);
+      console.warn("[useUpdateCheck] download failed:", error);
       throw error;
     }
   }, []);
@@ -54,6 +55,7 @@ export function useUpdateCheck() {
 
   return {
     isUpdateAvailable,
+    availableUpdate,
     isChecking,
     isDownloading,
     checkError,

@@ -59,5 +59,7 @@ On next app launch, side-loaded installs see the `UpdateModal` and install the n
 
 - Both the manifest (API) and the APK (Cloudinary) are served over HTTPS.
 - APKs are signed by EAS credentials, so installs are trusted by the device.
-- For extra safety, verify the downloaded file size (or a `sha256` you add to the manifest)
-  before launching the installer.
+- The app verifies downloads before install: exact `fileSize` match (fail-closed)
+  plus `md5` check when the manifest provides it (`upload-apk` writes both).
+  `sha256` is kept for server-side / manual verification — `expo-file-system`
+  only supports MD5 natively, so on-device SHA-256 is not streamed.

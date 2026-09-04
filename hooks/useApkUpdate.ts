@@ -5,6 +5,14 @@ import * as Application from "expo-application";
 import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
 import { apiClient } from "@/lib/api";
+import {
+  ensureNotificationChannel,
+  requestUpdatePermission,
+  showDownloadProgress,
+  showDownloadComplete,
+  showDownloadError,
+  dismissUpdateNotification,
+} from "@/lib/update-notification";
 
 export interface ApkUpdateInfo {
   version: string;
@@ -14,6 +22,7 @@ export interface ApkUpdateInfo {
   mandatory: boolean;
   available: boolean;
   sha256?: string;
+  md5?: string;
   fileSize?: number;
 }
 
@@ -32,7 +41,47 @@ interface MobileReleaseManifest {
   notes?: string;
   mandatory?: boolean;
   sha256?: string;
+  md5?: string;
   fileSize?: number;
+}
+
+async function verifyDownloadedFile(
+  uri: string,
+  expected: Pick<ApkUpdateInfo, "fileSize" | "md5" | "sha256" | "version">,
+  downloadedMd5?: string | null,
+): Promise<void> {
+  const info = await FileSystem.getInfoAsync(uri, { md5: true });
+  if (!info.exists) {
+    throw new Error("Downloaded file is missing");
+  }
+  const actualSize = info.size ?? 0;
+  if (expected.fileSize && expected.fileSize > 0) {
+    if (actualSize !== expected.fileSize) {
+      throw new Error(
+        `Download corrupted: expected ${expected.fileSize} bytes, got ${actualSize}`,
+      );
+    }
+  } else if (actualSize === 0) {
+    throw new Error("Downloaded file is empty");
+  }
+  const manifestMd5 = expected.md5?.toLowerCase();
+  const actualMd5 = (downloadedMd5 ?? ("md5" in info ? (info as { md5?: string }).md5 : undefined))?.toLowerCase();
+  if (manifestMd5) {
+    if (!actualMd5) {
+      throw new Error("Could not verify download integrity (MD5 unavailable)");
+    }
+    if (actualMd5 !== manifestMd5) {
+      throw new Error("Download corrupted: checksum mismatch");
+    }
+  } else if (expected.sha256) {
+    // expo-file-system only supports MD5 natively; SHA-256 cannot be
+    // streamed on-device without loading the whole 100MB+ APK into memory.
+    // Strict fileSize + HTTPS + EAS signature is the on-device guarantee;
+    // SHA-256 remains for server-side / manual verification.
+    console.warn(
+      `[useApkUpdate] v${expected.version}: manifest has sha256 but no md5; verified by exact fileSize only`,
+    );
+  }
 }
 
 const EMPTY_UPDATE: ApkUpdateInfo = {
@@ -48,12 +97,16 @@ const DOWNLOAD_STATE_KEY = "@myanify:apk-download-state";
 const APK_LOCAL_PATH = "myanify-update.apk";
 
 interface PersistedDownloadState {
+  version: string;
   versionCode: number;
   apkUrl: string;
   localUri: string;
   totalBytes: number;
   writtenBytes: number;
   status: "downloading" | "complete";
+  fileSize?: number;
+  md5?: string;
+  sha256?: string;
 }
 
 async function saveDownloadState(state: PersistedDownloadState) {
@@ -103,6 +156,26 @@ export function useApkUpdate() {
   const downloadRef = useRef<FileSystem.DownloadResumable | null>(null);
   const appStateRef = useRef(AppState.currentState);
   const downloadVersionCodeRef = useRef<number | null>(null);
+  const lastNotifyPercentRef = useRef(0);
+  const lastNotifyTimeRef = useRef(0);
+
+  // Ensure notification channel exists on mount
+  useEffect(() => {
+    void ensureNotificationChannel();
+  }, []);
+
+  const throttledNotify = useCallback(
+    (version: string, pct: number, written: number, total: number) => {
+      const now = Date.now();
+      const percentDelta = Math.abs(pct - lastNotifyPercentRef.current);
+      const timeDelta = now - lastNotifyTimeRef.current;
+      if (percentDelta < 5 && timeDelta < 2000) return;
+      lastNotifyPercentRef.current = pct;
+      lastNotifyTimeRef.current = now;
+      void showDownloadProgress(version, pct, written, total);
+    },
+    [],
+  );
 
   const check = useCallback(async () => {
     if (Platform.OS !== "android") return;
@@ -129,10 +202,11 @@ export function useApkUpdate() {
         mandatory: !!manifest.mandatory,
         available: latest > current,
         sha256: manifest.sha256,
+        md5: manifest.md5,
         fileSize: manifest.fileSize,
       });
     } catch (e) {
-      if (__DEV__) console.warn("[useApkUpdate] check failed:", e);
+      console.warn("[useApkUpdate] check failed:", e);
     } finally {
       setIsChecking(false);
     }
@@ -161,6 +235,18 @@ export function useApkUpdate() {
     if (!saved) return;
 
     if (saved.status === "complete") {
+      try {
+        await verifyDownloadedFile(saved.localUri, {
+          version: saved.version,
+          fileSize: saved.fileSize,
+          md5: saved.md5,
+          sha256: saved.sha256,
+        });
+      } catch (e) {
+        console.warn("[useApkUpdate] saved file failed verification, clearing:", e);
+        await clearDownloadState();
+        return;
+      }
       setDownloadStatus("complete");
       setDownloadProgress({
         totalBytes: saved.totalBytes,
@@ -192,6 +278,12 @@ export function useApkUpdate() {
           writtenBytes: data.totalBytesWritten,
           percent: pct,
         });
+        void throttledNotify(
+          saved.version || `v${saved.versionCode}`,
+          pct,
+          data.totalBytesWritten,
+          data.totalBytesExpectedToWrite,
+        );
       },
     );
 
@@ -202,6 +294,22 @@ export function useApkUpdate() {
     try {
       const result = await resumable.resumeAsync();
       if (result?.uri) {
+        try {
+          await verifyDownloadedFile(result.uri, {
+            version: saved.version,
+            fileSize: saved.fileSize,
+            md5: saved.md5,
+            sha256: saved.sha256,
+          });
+        } catch (verifyError) {
+          const message =
+            verifyError instanceof Error ? verifyError.message : "Download failed";
+          setError(message);
+          setDownloadStatus("error");
+          void showDownloadError(message);
+          await clearDownloadState();
+          return;
+        }
         setDownloadStatus("complete");
         setDownloadProgress((p) => ({
           ...p,
@@ -213,27 +321,46 @@ export function useApkUpdate() {
           status: "complete",
           writtenBytes: saved.totalBytes,
         });
+        void showDownloadComplete(saved.version || `v${saved.versionCode}`);
+        await installApk();
       }
     } catch (e) {
-      if (__DEV__) console.warn("[useApkUpdate] resume failed:", e);
+      console.warn("[useApkUpdate] resume failed:", e);
       setDownloadStatus("error");
       setError("Download interrupted. Tap Download to retry.");
+      void showDownloadError("Download interrupted. Tap Download to retry.");
       await clearDownloadState();
     }
-  }, [downloadStatus]);
+  }, [downloadStatus, throttledNotify]);
 
   const downloadAndInstall = useCallback(async () => {
     if (Platform.OS !== "android" || !apkUpdate.apkUrl) return;
 
     if (downloadStatus === "complete") {
+      const localUri = `${FileSystem.cacheDirectory}${APK_LOCAL_PATH}`;
+      try {
+        await verifyDownloadedFile(localUri, apkUpdate);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Download failed";
+        setError(message);
+        setDownloadStatus("error");
+        void showDownloadError(message);
+        await clearDownloadState();
+        return;
+      }
       await installApk();
       return;
     }
+
+    // Request notification permission before starting download
+    const hasPermission = await requestUpdatePermission();
 
     setError(null);
     setDownloadStatus("downloading");
     setDownloadProgress({ totalBytes: 0, writtenBytes: 0, percent: 0 });
     downloadVersionCodeRef.current = apkUpdate.versionCode;
+    lastNotifyPercentRef.current = 0;
+    lastNotifyTimeRef.current = 0;
 
     const baseDir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
     if (!baseDir) {
@@ -258,7 +385,24 @@ export function useApkUpdate() {
       }
     }
 
-    const options: FileSystem.DownloadOptions = {};
+    const localUriForState = localUri;
+    await saveDownloadState({
+      version: apkUpdate.version,
+      versionCode: apkUpdate.versionCode,
+      apkUrl: apkUpdate.apkUrl,
+      localUri: localUriForState,
+      totalBytes: apkUpdate.fileSize || 0,
+      writtenBytes: startingByte,
+      status: "downloading",
+      fileSize: apkUpdate.fileSize,
+      md5: apkUpdate.md5,
+      sha256: apkUpdate.sha256,
+    });
+
+    const options: FileSystem.DownloadOptions = {
+      // MD5 is only meaningful for full downloads; Range resumes change bytes on the wire
+      ...(startingByte === 0 ? { md5: true } : {}),
+    };
     if (startingByte > 0) {
       options.headers = { Range: `bytes=${startingByte}-` };
     }
@@ -279,6 +423,9 @@ export function useApkUpdate() {
           writtenBytes: adjustedWritten,
           percent: pct,
         });
+        if (hasPermission) {
+          throttledNotify(apkUpdate.version, pct, adjustedWritten, adjustedExpected);
+        }
       },
     );
 
@@ -288,46 +435,47 @@ export function useApkUpdate() {
       const result = await resumable.downloadAsync();
 
       if (result?.uri) {
-        // File size validation
-        if (apkUpdate.fileSize) {
-          const info = await FileSystem.getInfoAsync(result.uri);
-          if (info.exists && info.size !== apkUpdate.fileSize) {
-            throw new Error(
-              `Download corrupted: expected ${apkUpdate.fileSize} bytes, got ${info.size}`,
-            );
-          }
-        }
+        await verifyDownloadedFile(result.uri, apkUpdate, result.md5);
+        const info = await FileSystem.getInfoAsync(result.uri);
+        const finalSize = info.exists ? (info.size ?? 0) : 0;
 
         setDownloadStatus("complete");
         setDownloadProgress((p) => ({
           ...p,
           percent: 100,
-          writtenBytes: p.totalBytes,
+          writtenBytes: finalSize || p.totalBytes,
+          totalBytes: finalSize || p.totalBytes,
         }));
 
         await saveDownloadState({
+          version: apkUpdate.version,
           versionCode: apkUpdate.versionCode,
           apkUrl: apkUpdate.apkUrl,
           localUri: result.uri,
-          totalBytes: downloadProgress.totalBytes || apkUpdate.fileSize || 0,
-          writtenBytes: downloadProgress.totalBytes || apkUpdate.fileSize || 0,
+          totalBytes: finalSize || apkUpdate.fileSize || 0,
+          writtenBytes: finalSize || apkUpdate.fileSize || 0,
           status: "complete",
+          fileSize: apkUpdate.fileSize,
+          md5: apkUpdate.md5,
+          sha256: apkUpdate.sha256,
         });
 
+        void showDownloadComplete(apkUpdate.version);
         await installApk();
       }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Download failed";
       setError(message);
       setDownloadStatus("error");
-      if (__DEV__) console.warn("[useApkUpdate] download failed:", e);
+      console.warn("[useApkUpdate] download failed:", e);
+      void showDownloadError(message);
 
       await clearDownloadState();
       downloadRef.current = null;
     } finally {
       downloadRef.current = null;
     }
-  }, [apkUpdate, downloadStatus, downloadProgress.totalBytes]);
+  }, [apkUpdate, downloadStatus, downloadProgress.totalBytes, throttledNotify]);
 
   const installApk = useCallback(async () => {
     if (Platform.OS !== "android") return;
@@ -346,7 +494,7 @@ export function useApkUpdate() {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Install failed";
       setError(message);
-      if (__DEV__) console.warn("[useApkUpdate] install failed:", e);
+      console.warn("[useApkUpdate] install failed:", e);
       const isPermissionError =
         /install|unknown|permission/i.test(message) || message === "Install failed";
       if (isPermissionError) {
@@ -375,6 +523,7 @@ export function useApkUpdate() {
     setDownloadStatus("idle");
     setDownloadProgress({ totalBytes: 0, writtenBytes: 0, percent: 0 });
     setError(null);
+    void dismissUpdateNotification();
   }, []);
 
   const clearError = useCallback(() => setError(null), []);

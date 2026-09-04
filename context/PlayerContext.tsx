@@ -125,7 +125,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [isMuted, setIsMuted] = useState(false);
   const [isShuffled, setIsShuffled] = useState(false);
   const [repeatMode, setRepeatMode] = useState<"off" | "all" | "one">("off");
-  const [radioMode, setRadioMode] = useState(true);
+  const [radioMode, setRadioMode] = useState(false);
   const [radioSeedSongId, setRadioSeedSongId] = useState<string | null>(null);
   const [isFetchingRadio, setIsFetchingRadio] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
@@ -692,7 +692,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         );
         if (lastPos) {
           const saved = JSON.parse(lastPos);
-          if (saved.songId === last.id && saved.timestamp > 0) {
+          if (
+            saved.songId === last.id &&
+            typeof saved.timestamp === "number" &&
+            Number.isFinite(saved.timestamp) &&
+            saved.timestamp > 0 &&
+            (last.duration <= 0 || saved.timestamp < last.duration)
+          ) {
             restorePositionRef.current = saved.timestamp;
             setCurrentTime(saved.timestamp);
             if (last.duration > 0) setDuration(last.duration);
@@ -819,19 +825,26 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const saveToPlayHistory = async (song: Song) => {
-    if (!token) return;
-    try {
-      await apiClient.post("/play-history", {
-        songId: song.id,
-        duration: currentTime,
-      });
-    } catch (e) {
-      if (e instanceof Error && !e.message.includes("401")) {
-        console.error("Play history error:", e);
+  const saveToPlayHistory = useCallback(
+    async (song: Song, listenedSeconds?: number) => {
+      if (!token) return;
+      try {
+        const durationToSave =
+          typeof listenedSeconds === "number"
+            ? listenedSeconds
+            : currentTimeRef.current;
+        await apiClient.post("/play-history", {
+          songId: song.id,
+          duration: durationToSave,
+        });
+      } catch (e) {
+        if (e instanceof Error && !e.message.includes("401")) {
+          console.error("Play history error:", e);
+        }
       }
-    }
-  };
+    },
+    [token],
+  );
 
   const pushToHistory = useCallback((song: Song, source: QueueItemSource) => {
     setHistory((prev) => {
@@ -899,7 +912,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }
 
       void saveLastPlayedSong(song);
-      void saveToPlayHistory(song);
+      // NOTE: play history is saved on track advance (advanceToNext) with
+      // actual listen time, not here at play start (would always be 0).
     },
     [currentSong?.id, markSongSeen, applyUpNext, enableSmartRadio, toast],
   );
@@ -1069,6 +1083,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
       if (repeatMode === "one" && !force) return;
 
+      // Persist play history with actual listen time before advancing.
+      void saveToPlayHistory(song, currentTimeRef.current);
+
       pushToHistory(song, radioMode ? "radio" : "playlist");
       const active = getActiveUpNext();
 
@@ -1131,6 +1148,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       syncLegacyQueue,
       enableSmartRadio,
       playNextFromSmartRadio,
+      saveToPlayHistory,
     ],
   );
 

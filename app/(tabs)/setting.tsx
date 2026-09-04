@@ -50,7 +50,6 @@ export default function Setting() {
 
   // Local state for form fields
   const [name, setName] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [dialogConfig, setDialogConfig] = useState<{
     isOpen: boolean;
@@ -100,13 +99,12 @@ export default function Setting() {
   useEffect(() => {
     if (profile) {
       setName(profile.name || "");
-      setAvatarUrl(profile.avatarUrl || "");
     }
   }, [profile]);
 
   // Mutation for updating profile
   const updateProfileMutation = useMutation({
-    mutationFn: (data: { name: string; avatarUrl: string }) =>
+    mutationFn: (data: { name: string }) =>
       apiClient.patch("/user/profile", data),
     onSuccess: (data) => {
       queryClient.setQueryData(["user", "profile"], data);
@@ -127,7 +125,7 @@ export default function Setting() {
   });
 
   const handleSaveProfile = () => {
-    updateProfileMutation.mutate({ name, avatarUrl });
+    updateProfileMutation.mutate({ name });
   };
 
   // Song request form state
@@ -323,26 +321,11 @@ export default function Setting() {
                   />
                 </View>
 
-                <View>
-                  <Text className="text-foreground font-medium mb-2">
-                    Avatar URL
-                  </Text>
-                  <TextInput
-                    value={avatarUrl}
-                    onChangeText={setAvatarUrl}
-                    placeholder="https://example.com/avatar.jpg"
-                    placeholderTextColor={AppColors.placeholder}
-                    style={{ color: AppColors.foreground }}
-                    className="bg-background border border-border rounded-lg px-4 py-3"
-                  />
-                </View>
-
                 <View className="flex-row gap-2 mt-2">
                   <Button
                     onPress={() => {
                       setIsEditing(false);
                       setName(profile.name || "");
-                      setAvatarUrl(profile.avatarUrl || "");
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                     className="flex-1"

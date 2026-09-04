@@ -86,19 +86,30 @@ export function FullPlayer() {
   const baseTimeRef = useRef(contextCurrentTime);
   const lastContextTimeRef = useRef(contextCurrentTime);
 
-  // Detect seeks: only restart interval when context time jumps significantly
+  // Detect seeks: only restart interval when context time jumps significantly.
+  // Also snap local time to the engine when drift exceeds 0.5s (low-power
+  // mode / throttled timers) so the playhead never desyncs for a whole song.
   const [seekTick, setSeekTick] = useState(0);
   useEffect(() => {
     const jump = Math.abs(contextCurrentTime - lastContextTimeRef.current);
     if (jump > 2 || lastContextTimeRef.current === 0) {
       baseTimeRef.current = contextCurrentTime;
       setSeekTick((t) => t + 1);
-      if (!isPlaying) {
+      if (!isPlaying || isSliding === false) {
         setLocalCurrentTime(contextCurrentTime);
       }
+    } else if (!isPlaying) {
+      setLocalCurrentTime(contextCurrentTime);
+    } else if (!isSliding) {
+      setLocalCurrentTime((prev) => {
+        if (Math.abs(prev - contextCurrentTime) > 0.5) {
+          return contextCurrentTime;
+        }
+        return prev;
+      });
     }
     lastContextTimeRef.current = contextCurrentTime;
-  }, [contextCurrentTime, isPlaying]);
+  }, [contextCurrentTime, isPlaying, isSliding]);
 
   // High-frequency time updates for smooth lyrics synchronization
   useEffect(() => {
@@ -111,7 +122,12 @@ export function FullPlayer() {
     const intervalId = setInterval(() => {
       const elapsed = (Date.now() - startTime) / 1000;
       const interpolated = baseTime + elapsed;
-      setLocalCurrentTime(Math.min(interpolated, durationRef.current));
+      // Guard against drift: if the engine moved on (seek from elsewhere),
+      // prefer engine time over extrapolation.
+      const engineTime = contextTimeRef.current;
+      const candidate =
+        Math.abs(interpolated - engineTime) > 1.0 ? engineTime : interpolated;
+      setLocalCurrentTime(Math.min(candidate, durationRef.current));
     }, 100);
 
     return () => clearInterval(intervalId);

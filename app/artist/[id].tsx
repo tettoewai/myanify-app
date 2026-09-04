@@ -11,6 +11,7 @@ import { useLikeSong } from "@/hooks/useLikeSong";
 import { apiClient } from "@/lib/api";
 import { formatSongFromApi } from "@/lib/song-format";
 import { getSongCoverUrl } from "@/lib/song-cover";
+import { shareEntity } from "@/lib/share";
 import { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -136,6 +137,10 @@ function ArtistDetailsScreen() {
     } else {
       likeArtist.mutate(artistId);
     }
+  };
+
+  const handleShare = () => {
+    void shareEntity("artist", artist, { title: artist.name });
   };
 
   const renderSongItem = ({ item, index }: { item: Song; index: number }) => {
@@ -289,7 +294,10 @@ function ArtistDetailsScreen() {
             >
               {artist.name}
             </Animated.Text>
-            <TouchableOpacity className="w-10 h-10 items-center justify-center rounded-full bg-black/50">
+            <TouchableOpacity
+              onPress={handleShare}
+              className="w-10 h-10 items-center justify-center rounded-full bg-black/50"
+            >
               <StyledIonicons
                 name="share-social-outline"
                 size={20}
