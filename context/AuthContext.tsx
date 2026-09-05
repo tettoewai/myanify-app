@@ -34,6 +34,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearSession = useCallback(async () => {
     await authStorage.removeToken();
+    // Wipe offline downloads + license on logout (dynamic import avoids
+    // a hard dependency cycle with the download manager).
+    try {
+      const { clearAllOfflineData } = await import("@/lib/vip-offline");
+      await clearAllOfflineData();
+    } catch (error) {
+      console.error("Failed to wipe offline data on logout:", error);
+    }
     setToken(null);
     queryClient.clear();
   }, [queryClient]);

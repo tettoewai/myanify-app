@@ -16,15 +16,15 @@ export function useSearch(
 
   return useQuery<SearchResponse>({
     queryKey: ["search", trimmed, limit],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams({
         search: trimmed!,
         limit: String(limit),
       });
 
       const [songsRes, artistsRes] = await Promise.all([
-        apiClient.get(`/songs?${params}&isPublished=true`),
-        apiClient.get(`/artists?${params}`),
+        apiClient.fetch(`/songs?${params}&isPublished=true`, { signal }),
+        apiClient.fetch(`/artists?${params}`, { signal }),
       ]);
 
       return {
@@ -34,5 +34,7 @@ export function useSearch(
     },
     enabled: !!trimmed && (options?.enabled ?? true),
     staleTime: 60 * 1000,
+    // Keep last results visible while typing so list doesn't flash empty.
+    placeholderData: (prev) => prev,
   });
 }

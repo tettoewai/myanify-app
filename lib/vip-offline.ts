@@ -9,6 +9,12 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as SecureStore from "expo-secure-store";
 import { apiClient } from "./api";
 import { authStorage } from "./auth-storage";
+import {
+  getDownloadSettings,
+  getSubscriptionStatus,
+  isOfflinePlaybackAllowed,
+} from "./download-settings";
+import { TRACKS_DIRECTORY } from "./offline-storage";
 
 const DOWNLOADS_DIR = `${FileSystem.documentDirectory}offline_downloads/`;
 const LICENSE_KEY = "vip_license_key";
@@ -63,9 +69,13 @@ export async function registerDevice(deviceName?: string): Promise<{ deviceId: s
   }
 }
 
-// Validate license for offline playback
+// Validate license for offline playback.
+// When admin disables the VIP requirement, any signed-in user may download.
 export async function validateLicense(): Promise<boolean> {
   try {
+    const settings = await getDownloadSettings().catch(() => null);
+    if (settings && !settings.requireVip) return true;
+
     const deviceId = await getDeviceId();
     const licenseKey = await getLicenseKey();
     
@@ -119,10 +129,15 @@ export class OfflineDownloadManager {
       return fileUri;
     }
 
-    // Validate license before downloading
+    // Validate license before downloading (skipped when VIP not required)
     const isValid = await validateLicense();
     if (!isValid) {
-      throw new Error("Valid VIP license required for downloads");
+      const settings = await getDownloadSettings().catch(() => null);
+      if (settings && !settings.requireVip) {
+        // Fall through — server still enforces the per-user cap.
+      } else {
+        throw new Error("Valid VIP license required for downloads");
+      }
     }
 
     // Create API request to initiate download on server
@@ -255,9 +270,18 @@ export class OfflineDownloadManager {
   }
 
   async getDownloadedFile(songId: string): Promise<string | null> {
+    // Immediate block on VIP expiry: never hand out a local file when the
+    // user is no longer entitled to offline playback.
+    const allowed = await isOfflinePlaybackAllowed().catch(() => false);
+    if (!allowed) return null;
+
     const fileUri = `${DOWNLOADS_DIR}${songId}.mp3`;
     const fileInfo = await FileSystem.getInfoAsync(fileUri);
     return fileInfo.exists ? fileUri : null;
+  }
+
+  getPendingIds(): string[] {
+    return Array.from(this.downloads.keys());
   }
 
   async getAllDownloads(): Promise<string[]> {
@@ -286,3 +310,39 @@ export class OfflineDownloadManager {
 
 // Singleton instance
 export const downloadManager = new OfflineDownloadManager();
+
+/**
+ * Wipe all offline data on logout: both download dirs (legacy
+ * offline_tracks/ + offline_downloads/), per-song metadata sidecars,
+ * and the device license key. Device ID is kept so re-login reuses it.
+ */
+export async function clearAllOfflineData(): Promise<void> {
+  // Cancel in-flight downloads first.
+  const pending = downloadManager.getPendingIds?.() ?? [];
+  for (const songId of pending) {
+    try {
+      await downloadManager.cancelDownload(songId);
+    } catch {
+      // Best effort.
+    }
+  }
+
+  for (const dir of [DOWNLOADS_DIR, TRACKS_DIRECTORY]) {
+    try {
+      const info = await FileSystem.getInfoAsync(dir);
+      if (info.exists) {
+        await FileSystem.deleteAsync(dir, { idempotent: true });
+      }
+    } catch (error) {
+      console.error("Error wiping offline directory:", dir, error);
+    }
+  }
+
+  try {
+    await SecureStore.deleteItemAsync(LICENSE_KEY);
+  } catch {
+    // No license stored — fine.
+  }
+}
+
+export { getSubscriptionStatus, isOfflinePlaybackAllowed };

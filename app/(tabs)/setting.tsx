@@ -93,6 +93,7 @@ export default function Setting() {
     queryKey: ["user", "profile"],
     queryFn: () => apiClient.get("/user/profile"),
     enabled: !!token,
+    staleTime: 5 * 60 * 1000,
   });
 
   // Update form fields when profile loads
@@ -140,6 +141,7 @@ export default function Setting() {
     queryKey: ["song-requests"],
     queryFn: () => apiClient.get("/song-requests"),
     enabled: !!token,
+    staleTime: 2 * 60 * 1000,
   });
 
   // Submit song request mutation

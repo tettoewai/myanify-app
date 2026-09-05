@@ -9,10 +9,15 @@ import { UpdateModal } from "@/components/UpdateModal";
 import { useAuth } from "@/context/AuthContext";
 import { useEffect, useState } from "react";
 import * as Notifications from "expo-notifications";
+import { registerBackgroundUpdateCheck } from "@/lib/background-update-check";
 import "../global.css";
 import "@/lib/theme";
 
 export default function RootLayout() {
+  useEffect(() => {
+    void registerBackgroundUpdateCheck();
+  }, []);
+
   const {
     isUpdateAvailable,
     availableUpdate,
@@ -103,14 +108,18 @@ export default function RootLayout() {
     }
   }, [isDownloadComplete]);
 
-  // Handle notification tap — trigger install if download is complete
+  // Handle notification tap — trigger install if download is complete, or show update modal if available
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as Record<string, string>;
-      if (data?.type === "apk-update" && data?.status === "complete") {
-        if (downloadStatus === "complete") {
-          void downloadAndInstall();
-        } else {
+      if (data?.type === "apk-update") {
+        if (data?.status === "complete") {
+          if (downloadStatus === "complete") {
+            void downloadAndInstall();
+          } else {
+            setUpdateModalVisible(true);
+          }
+        } else if (data?.status === "available") {
           setUpdateModalVisible(true);
         }
       }

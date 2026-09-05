@@ -6,6 +6,10 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
 import { apiClient } from "@/lib/api";
 import {
+  isAllowedApkUrl,
+  verifyManifest,
+} from "@/lib/update-verify";
+import {
   ensureNotificationChannel,
   requestUpdatePermission,
   showDownloadProgress,
@@ -24,6 +28,12 @@ export interface ApkUpdateInfo {
   sha256?: string;
   md5?: string;
   fileSize?: number;
+  minVersionCode?: number;
+  rollout?: number;
+  certSha256?: string;
+  previousVersion?: string;
+  previousVersionCode?: number;
+  previousApkUrl?: string;
 }
 
 export type DownloadStatus = "idle" | "downloading" | "complete" | "error";
@@ -43,6 +53,60 @@ interface MobileReleaseManifest {
   sha256?: string;
   md5?: string;
   fileSize?: number;
+  minVersionCode?: number;
+  rollout?: number;
+  certSha256?: string;
+  previousVersion?: string;
+  previousVersionCode?: number;
+  previousApkUrl?: string;
+  signature?: string;
+}
+
+const ROLLOUT_ID_KEY = "@myanify:rollout-id";
+
+async function getRolloutId(): Promise<string> {
+  try {
+    const existing = await AsyncStorage.getItem(ROLLOUT_ID_KEY);
+    if (existing) return existing;
+    const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+    await AsyncStorage.setItem(ROLLOUT_ID_KEY, id);
+    return id;
+  } catch {
+    return "unknown";
+  }
+}
+
+function rolloutEligible(rolloutId: string, versionCode: number, rollout: number): boolean {
+  if (rollout >= 100) return true;
+  if (rollout <= 0) return false;
+  // FNV-1a 32-bit, deterministic per device+version (no WebCrypto dependency)
+  let h = 0x811c9dc5;
+  const s = `${rolloutId}:${versionCode}`;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h % 100 < rollout;
+}
+
+function reportEvent(
+  event: string,
+  current: number | null,
+  latest: number | null,
+  error?: string,
+) {
+  try {
+    void apiClient
+      .post("/mobile-update/events", {
+        event,
+        currentVersionCode: current,
+        latestVersionCode: latest,
+        ...(error ? { error } : {}),
+      })
+      .catch(() => {});
+  } catch {
+    // telemetry must never break updates
+  }
 }
 
 async function verifyDownloadedFile(
@@ -192,19 +256,60 @@ export function useApkUpdate() {
       }
 
       const current = parseInt(Application.nativeBuildVersion ?? "0", 10);
+
+      // 1. Allowlist: only GitHub Release assets under our repo.
+      if (!isAllowedApkUrl(manifest.apkUrl)) {
+        console.warn("[useApkUpdate] rejected manifest: apkUrl not allowlisted");
+        reportEvent("download_error", current, manifest.versionCode, "apkUrl not allowlisted");
+        setApkUpdate(EMPTY_UPDATE);
+        return;
+      }
+
+      // 2. Signature: fail-closed once a public key is baked into the build.
+      if (!verifyManifest(manifest)) {
+        console.warn("[useApkUpdate] rejected manifest: bad/missing signature");
+        reportEvent("download_error", current, manifest.versionCode, "bad manifest signature");
+        setApkUpdate(EMPTY_UPDATE);
+        setError("Update manifest failed verification. Please update later.");
+        return;
+      }
+
       const latest = manifest.versionCode;
+      let available = latest > current;
+
+      // 3. Staged rollout: deterministic per-device gate.
+      if (available && manifest.rollout !== undefined && manifest.rollout < 100) {
+        const rolloutId = await getRolloutId();
+        if (!rolloutEligible(rolloutId, latest, manifest.rollout)) {
+          available = false;
+        }
+      }
+
+      // 4. Minimum supported build: below minVersionCode => forced update.
+      const mandatory =
+        !!manifest.mandatory ||
+        (typeof manifest.minVersionCode === "number" &&
+          manifest.minVersionCode > current &&
+          latest > current);
 
       setApkUpdate({
         version: manifest.version ?? "",
         versionCode: latest,
         apkUrl: manifest.apkUrl,
         notes: manifest.notes ?? "",
-        mandatory: !!manifest.mandatory,
-        available: latest > current,
+        mandatory,
+        available,
         sha256: manifest.sha256,
         md5: manifest.md5,
         fileSize: manifest.fileSize,
+        minVersionCode: manifest.minVersionCode,
+        rollout: manifest.rollout,
+        certSha256: manifest.certSha256,
+        previousVersion: manifest.previousVersion,
+        previousVersionCode: manifest.previousVersionCode,
+        previousApkUrl: manifest.previousApkUrl,
       });
+      reportEvent(available ? "available" : "check", current, latest);
     } catch (e) {
       console.warn("[useApkUpdate] check failed:", e);
     } finally {
@@ -354,6 +459,8 @@ export function useApkUpdate() {
 
     // Request notification permission before starting download
     const hasPermission = await requestUpdatePermission();
+    const current = parseInt(Application.nativeBuildVersion ?? "0", 10);
+    reportEvent("download_start", current, apkUpdate.versionCode);
 
     setError(null);
     setDownloadStatus("downloading");
@@ -461,7 +568,17 @@ export function useApkUpdate() {
         });
 
         void showDownloadComplete(apkUpdate.version);
+        reportEvent(
+          "download_complete",
+          parseInt(Application.nativeBuildVersion ?? "0", 10),
+          apkUpdate.versionCode,
+        );
         await installApk();
+        reportEvent(
+          "install_prompt",
+          parseInt(Application.nativeBuildVersion ?? "0", 10),
+          apkUpdate.versionCode,
+        );
       }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Download failed";
@@ -469,6 +586,12 @@ export function useApkUpdate() {
       setDownloadStatus("error");
       console.warn("[useApkUpdate] download failed:", e);
       void showDownloadError(message);
+      reportEvent(
+        "download_error",
+        parseInt(Application.nativeBuildVersion ?? "0", 10),
+        apkUpdate.versionCode,
+        message,
+      );
 
       await clearDownloadState();
       downloadRef.current = null;

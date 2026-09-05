@@ -68,6 +68,16 @@
     },
     "plugins": [
       [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "-keep class com.facebook.hermes.** { *; }"
+          }
+        }
+      ],
+      [
         "expo-audio",
         {
           "recordAudioAndroid": false

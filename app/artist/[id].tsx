@@ -87,6 +87,7 @@ function ArtistDetailsScreen() {
     queryKey: ["artist", id],
     queryFn: () => apiClient.get(`/artists/${id}`),
     enabled: !!id && !!token,
+    staleTime: 5 * 60 * 1000,
   });
 
   const songs: Song[] = useMemo(() => {

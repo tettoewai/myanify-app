@@ -1,75 +1,112 @@
-# Mobile Release & Self-Update
+# Mobile Release & Self-Update (no Play Store)
 
-The Expo app (`myanify-app`) is distributed **without the Play Store** (no Google/Apple
-developer account). Users side-load the Android APK and update it from **inside the app**.
+Side-loaded Android APK + in-app updater backed by **GitHub Releases**
+(`tettoewai/myanify-releases`, configurable via `RELEASE_REPO`).
 
-There are two update channels:
+Two channels:
 
-1. **OTA (JS-only changes)** — handled by `expo-updates` (EAS Update). No reinstall needed.
-   Wired in `myanify-app/hooks/useUpdateCheck.ts` and surfaced via `UpdateModal`.
-2. **Binary APK (native changes)** — handled by `myanify-app/hooks/useApkUpdate.ts`. The app
-   fetches a manifest from the web backend and, when a newer `versionCode` is available, prompts
-   the user to download and install the new APK. iOS is out of scope (no self-install without
-   the App Store).
+1. **OTA (JS-only)** — `expo-updates` (EAS Update, channel `production`).
+   `hooks/useUpdateCheck.ts` + `UpdateModal`. No reinstall.
+2. **Binary APK (native changes)** — `hooks/useApkUpdate.ts` fetches
+   `GET /api/mobile-update`, compares `versionCode`, downloads the APK from
+   `github.com/<repo>/releases/download/...`, verifies, fires the installer.
 
-## How the binary check works
+## Manifest
 
-- `GET /api/mobile-update` (web app) returns `mobile-release.json`:
-  ```json
-  { "version": "1.0.2", "versionCode": 3, "apkUrl": "<cloudinary-url>", "notes": "...", "mandatory": false }
-  ```
-- On launch, `useApkUpdate` compares `Application.nativeBuildVersion` (the APK's `versionCode`)
-  with `manifest.versionCode`. If `latest > current`, the `UpdateModal` appears.
-- `Download & install` downloads the APK to the cache, obtains a content URI, and launches the
-  Android package installer (`ACTION_INSTALL_PACKAGE`). If the "Install unknown apps" permission
-  is missing, the app opens the system settings for it.
+`GET /api/mobile-update` serves (in order):
 
-## Releasing a JS-only update (OTA)
+1. `MobileRelease` DB row (highest active `versionCode`) — updatable at
+   runtime, **no web redeploy needed**.
+2. `myanify/mobile-release.json` file fallback (seed / disaster recovery).
+
+Shape (`myanify/lib/mobile-release.ts`):
+
+```json
+{
+  "version": "1.0.9", "versionCode": 22,
+  "apkUrl": "https://github.com/tettoewai/myanify-releases/releases/download/v1.0.9/....apk",
+  "notes": "...", "mandatory": false,
+  "sha256": "...", "md5": "...", "fileSize": 123456,
+  "minVersionCode": 1, "rollout": 100,
+  "certSha256": "<apksigner fingerprint>",
+  "previousVersion": "1.0.8", "previousVersionCode": 21, "previousApkUrl": "...",
+  "signature": "<base64 Ed25519>"
+}
+```
+
+Security:
+
+- `apkUrl` allowlisted to `https://github.com/<RELEASE_REPO>/releases/download/...`
+  on server **and** client (`lib/update-verify.ts`). A compromised manifest
+  alone can't redirect downloads elsewhere.
+- Ed25519 `signature` over the canonical payload. Generate with
+  `cd ../myanify && pnpm gen:release-keys`, put the public key in
+  `myanify-app/.env` as `EXPO_PUBLIC_RELEASE_PUBLIC_KEY`. Once baked in,
+  unsigned/tampered manifests are rejected fail-closed.
+- On-device file check: exact `fileSize` + `md5` (fail-closed).
+  OS-level signer check still applies (same keystore required for updates).
+
+## One-command release (normal path)
+
+```bash
+cd myanify
+./scripts/release-apk.sh 1.0.9 --notes "Fix X" [--mandatory] [--rollout 25]
+```
+
+Does: `bump-mobile-version` (app.json + package.json lockstep) → `eas build
+--local --profile production-apk` → `aapt`/`apksigner` verify → `upload:apk`
+(create GitHub release, sign manifest, update `mobile-release.json`,
+`POST /api/mobile-update` with `RELEASE_ADMIN_TOKEN` so production updates
+**without redeploy**).
+
+Manual equivalent:
 
 ```bash
 cd myanify-app
-eas update --channel production --message "Describe the change"
+eas build --platform android --profile production-apk --local \
+  --output /tmp/myanify_1_0_9.apk --non-interactive
+aapt dump badging /tmp/myanify_1_0_9.apk | head -n 1
+apksigner verify --print-certs /tmp/myanify_1_0_9.apk
+cd ../myanify
+pnpm upload:apk /tmp/myanify_1_0_9.apk --cert-sha256 <fp> --notes "..."
+# without RELEASE_ADMIN_TOKEN set, deploy web to publish mobile-release.json
 ```
 
-Existing installs pick this up automatically via `expo-updates` — no new APK needed.
-(Keep `app.json` `version` unchanged so `runtimeVersion` stays the same.)
+OTA-only:
 
-## Releasing a new APK (binary update)
+```bash
+cd myanify-app
+eas update --channel production --message "..."
+```
 
-> `eas.json` uses `"appVersionSource": "local"` + `"credentialsSource": "local"`,
-> so `app.json` `version`/`versionCode` are honored and the APK is signed with
-> `credentials.json` → `android/app/debug.keystore` (same key as all prior
-> releases — required for in-place updates; a different key causes
-> "App not installed as package appears to be invalid").
-> Bump `app.json` (+ `package.json`) manually before building.
+## Signing keys (important)
 
-1. Build the standalone APK locally:
-   ```bash
-   cd myanify-app
-   eas build --platform android --profile production-apk --local \
-     --output /tmp/myanify_<version>_<code>.apk --non-interactive
-   ```
-   Verify before uploading:
-   ```bash
-   aapt dump badging /tmp/myanify_*.apk | head -n 1   # versionCode must be > previous
-   apksigner verify --print-certs /tmp/myanify_*.apk  # SHA-256 must match previous release
-   ```
-2. Upload the APK to Cloudinary (prints the hosted URL):
-   ```bash
-   cd ../myanify
-   pnpm upload:apk /path/to/myanify-app.apk
-   ```
-3. Edit `myanify/mobile-release.json`: set `version`, `versionCode` (from the EAS build),
-   `apkUrl` (from step 2), `notes`, and `mandatory` if the update is required.
-4. Ship the backend (the `/api/mobile-update` route reads this file).
+- `credentials.json` currently points at the **debug keystore** — migrate:
+  `./scripts/gen-release-keystore.sh`, fill `credentials.json` from
+  `credentials.json.example`, back up keystore + passwords off-machine.
+  Losing it = users must reinstall (Android rejects signer change as update).
+- Manifest signing is separate: `pnpm gen:release-keys` (web repo).
+  Private → `myanify/.env.local` (`RELEASE_SIGNING_PRIVATE_KEY`),
+  public → `myanify-app/.env` + `.env.production`.
+- Record `apksigner` SHA-256 as `RELEASE_CERT_SHA256` for manual verification.
 
-On next app launch, side-loaded installs see the `UpdateModal` and install the new APK in-place.
+## Rollouts & rollbacks
 
-## Security notes
+- `--rollout 25` gates to 25% of devices (deterministic per-device bucket).
+- `--min-version-code N` forces everyone below N to update even if
+  `mandatory: false`.
+- Rollback: republish previous `apkUrl` via `POST /api/mobile-update`
+  (or `upload:apk --force` with the old version bumped), or point users at
+  `previousApkUrl` stored in the manifest.
 
-- Both the manifest (API) and the APK (Cloudinary) are served over HTTPS.
-- APKs are signed by EAS credentials, so installs are trusted by the device.
-- The app verifies downloads before install: exact `fileSize` match (fail-closed)
-  plus `md5` check when the manifest provides it (`upload-apk` writes both).
-  `sha256` is kept for server-side / manual verification — `expo-file-system`
-  only supports MD5 natively, so on-device SHA-256 is not streamed.
+## Telemetry
+
+Client reports `check/available/download_start/download_complete/download_error/
+install_prompt` to `POST /api/mobile-update/events` (no PII). Query
+`MobileUpdateEvent` for adoption by `latestVersionCode`.
+
+## Size
+
+`expo-build-properties` enables Proguard + shrinkResources in release builds.
+Keep binary updates rare (OTA-first); full APK is still ~100MB+.
+Per-ABI splits would need per-ABI `apkUrl`s — not implemented (complexity).

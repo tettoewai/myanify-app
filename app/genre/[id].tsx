@@ -20,6 +20,7 @@ export default function GenreRedirect() {
     queryKey: ["genre", id],
     queryFn: () => apiClient.get(`/genres/${id}`),
     enabled: !!id && !!token,
+    staleTime: 5 * 60 * 1000,
   });
 
   if (isLoading) {

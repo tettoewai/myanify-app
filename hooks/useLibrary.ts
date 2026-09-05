@@ -1,12 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
 import { formatSongFromApi } from "@/lib/song-format";
 import { Artist, Playlist, Song } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
+import { usePlaylistMutations } from "@/hooks/usePlaylistMutations";
 
 export const useLibrary = () => {
-  const queryClient = useQueryClient();
   const { token } = useAuth();
+  const mutations = usePlaylistMutations();
 
   const {
     data: likedSongsData,
@@ -14,12 +15,15 @@ export const useLibrary = () => {
     isRefetching: isRefetchingSongs,
     refetch: refetchSongs,
   } = useQuery({
+    // Canonical shape { data: [...] } shared with useLikeSong — do not unwrap
+    // here or the two hooks thrash each other's cache and double-fetch.
     queryKey: ["liked-songs"],
     queryFn: async () => {
       const response = await apiClient.get("/liked-songs");
-      return response.data as any[];
+      return response;
     },
     enabled: !!token,
+    staleTime: 5 * 60 * 1000,
   });
 
   const {
@@ -28,12 +32,14 @@ export const useLibrary = () => {
     isRefetching: isRefetchingArtists,
     refetch: refetchArtists,
   } = useQuery({
+    // Shared with useLikeArtist — same key/shape/staleTime.
     queryKey: ["liked-artists"],
     queryFn: async () => {
       const response = await apiClient.get("/liked-artists");
-      return response.data as Artist[];
+      return response;
     },
     enabled: !!token,
+    staleTime: 5 * 60 * 1000,
   });
 
   const {
@@ -48,64 +54,25 @@ export const useLibrary = () => {
       return response.data as Playlist[];
     },
     enabled: !!token,
+    staleTime: 2 * 60 * 1000,
   });
 
-  const createPlaylistMutation = useMutation({
-    mutationFn: async (name: string) => {
-      return apiClient.post("/playlists", { name });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["playlists"] });
-    },
-  });
-
-  const updatePlaylistMutation = useMutation({
-    mutationFn: async ({
-      id,
-      data,
-    }: {
-      id: string;
-      data: { name?: string; description?: string };
-    }) => {
-      return apiClient.put(`/playlists/${id}`, data);
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["playlists"] });
-      queryClient.invalidateQueries({ queryKey: ["playlist", variables.id] });
-    },
-  });
-
-  const deletePlaylistMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return apiClient.delete(`/playlists/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["playlists"] });
-    },
-  });
-
-  const removeFromPlaylistMutation = useMutation({
-    mutationFn: async ({
-      playlistId,
-      songId,
-    }: {
-      playlistId: string;
-      songId: string;
-    }) => {
-      return apiClient.delete(`/playlists/${playlistId}/songs/${songId}`);
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["playlists"] });
-      queryClient.invalidateQueries({
-        queryKey: ["playlist", variables.playlistId],
-      });
-    },
-  });
-
-  const likedSongs: Song[] = likedSongsData?.length
-    ? likedSongsData.map(formatSongFromApi)
+  const rawLikedSongs: any[] = Array.isArray(likedSongsData)
+    ? likedSongsData
+    : (likedSongsData?.data ?? []);
+  const rawLikedArtists: Artist[] = Array.isArray(likedArtistsData)
+    ? (likedArtistsData as Artist[])
+    : (likedArtistsData?.data ?? []);
+  const likedSongs: Song[] = rawLikedSongs.length
+    ? rawLikedSongs.map((s) => {
+        try {
+          return formatSongFromApi(s);
+        } catch {
+          return s as Song;
+        }
+      })
     : [];
-  const likedArtists: Artist[] = likedArtistsData || [];
+  const likedArtists: Artist[] = rawLikedArtists || [];
   const playlists: Playlist[] = playlistsData || [];
 
   return {
@@ -115,18 +82,7 @@ export const useLibrary = () => {
     isLoading: isLoadingSongs || isLoadingArtists || isLoadingPlaylists,
     isRefetching:
       isRefetchingSongs || isRefetchingArtists || isRefetchingPlaylists,
-    createPlaylist: createPlaylistMutation.mutateAsync,
-    isCreatingPlaylist: createPlaylistMutation.isPending,
-    updatePlaylist: (
-      id: string,
-      data: { name?: string; description?: string }
-    ) => updatePlaylistMutation.mutateAsync({ id, data }),
-    isUpdatingPlaylist: updatePlaylistMutation.isPending,
-    deletePlaylist: deletePlaylistMutation.mutateAsync,
-    isDeletingPlaylist: deletePlaylistMutation.isPending,
-    removeFromPlaylist: (playlistId: string, songId: string) =>
-      removeFromPlaylistMutation.mutateAsync({ playlistId, songId }),
-    isRemovingFromPlaylist: removeFromPlaylistMutation.isPending,
+    ...mutations,
     refetch: async () => {
       await Promise.all([
         refetchSongs(),

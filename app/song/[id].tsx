@@ -44,6 +44,8 @@ function SongPlayerScreen() {
       return formatSongFromApi(song) as Song;
     },
     enabled: shouldLoadSong && !!token,
+    // Lyrics come bundled via ?include=lyrics so PlayerContext won't refetch.
+    staleTime: 5 * 60 * 1000,
   });
 
   useEffect(() => {

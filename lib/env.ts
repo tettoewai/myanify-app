@@ -5,6 +5,8 @@ type AppExtra = {
   appUrl?: string;
   cloudinaryCloudName?: string;
   vercelBypassToken?: string;
+  releasePublicKey?: string;
+  releaseRepo?: string;
 };
 
 const extra = (Constants.expoConfig?.extra ?? {}) as AppExtra;
@@ -44,5 +46,12 @@ export function getVercelBypassToken(): string | null {
   const v =
     process.env.EXPO_PUBLIC_VERCEL_BYPASS_TOKEN ||
     (Constants.expoConfig?.extra as AppExtra)?.vercelBypassToken;
+  return v?.trim() ? v.trim() : null;
+}
+
+export function getReleasePublicKey(): string | null {
+  const v =
+    process.env.EXPO_PUBLIC_RELEASE_PUBLIC_KEY ||
+    (Constants.expoConfig?.extra as AppExtra)?.releasePublicKey;
   return v?.trim() ? v.trim() : null;
 }

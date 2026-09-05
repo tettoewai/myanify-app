@@ -12,9 +12,11 @@ export const useLikeArtist = () => {
   const { token } = useAuth();
 
   const { data: likedArtists, isLoading } = useQuery({
+    // Shared with useLibrary — same key/shape/staleTime so React Query dedupes.
     queryKey: ["liked-artists"],
     queryFn: () => apiClient.get("/liked-artists"),
     enabled: !!token,
+    staleTime: 5 * 60 * 1000,
   });
 
   const likeArtist = useMutation({
@@ -41,7 +43,10 @@ export const useLikeArtist = () => {
   });
 
   const isLikedArtist = (artistId: string) => {
-    return likedArtists?.data?.some((artist: Artist) => artist.id === artistId);
+    const list = Array.isArray(likedArtists)
+      ? likedArtists
+      : (likedArtists?.data ?? []);
+    return list.some((artist: Artist) => artist.id === artistId);
   };
 
   const unlikeArtist = useMutation({

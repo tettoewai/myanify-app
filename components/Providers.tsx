@@ -35,7 +35,23 @@ const config: HeroUINativeConfig = {
 };
 
 export default function Provider({ children }: { children: ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient());
+  // Default staleTime prevents refetch storms on every tab switch / remount.
+  // Individual hooks can override per-endpoint (e.g. longer for genres).
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 2 * 60 * 1000,
+            gcTime: 15 * 60 * 1000,
+            retry: 1,
+            refetchOnMount: true,
+            refetchOnReconnect: true,
+            refetchOnWindowFocus: false,
+          },
+        },
+      }),
+  );
   const [appIsReady, setAppIsReady] = useState(true);
 
   const onLayoutRootView = useCallback(async () => {

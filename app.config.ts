@@ -23,6 +23,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const appUrl = requireEnv("EXPO_PUBLIC_APP_URL").replace(/\/$/, "");
   const cloudinaryCloudName = requireEnv("EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME");
   const vercelBypassToken = optionalEnv("EXPO_PUBLIC_VERCEL_BYPASS_TOKEN");
+  const releasePublicKey = optionalEnv("EXPO_PUBLIC_RELEASE_PUBLIC_KEY");
+  const releaseRepo =
+    optionalEnv("EXPO_PUBLIC_RELEASE_REPO") ?? "tettoewai/myanify-releases";
 
   return {
     ...config,
@@ -32,6 +35,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       appUrl,
       cloudinaryCloudName,
       ...(vercelBypassToken ? { vercelBypassToken } : {}),
+      ...(releasePublicKey ? { releasePublicKey } : {}),
+      releaseRepo,
     },
   } as ExpoConfig;
 };

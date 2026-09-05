@@ -93,6 +93,7 @@ export default function Search() {
         `/songs?genreId=${selectedGenreId}&isPublished=true&limit=50`,
       ),
     enabled: !!selectedGenreId && !shouldSearch && !!token,
+    staleTime: 2 * 60 * 1000,
   });
 
   const genres: Genre[] = genresData?.data || [];

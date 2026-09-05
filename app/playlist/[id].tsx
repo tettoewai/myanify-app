@@ -7,7 +7,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
-import { useLibrary } from "@/hooks/useLibrary";
+import { usePlaylistMutations } from "@/hooks/usePlaylistMutations";
 import { apiClient } from "@/lib/api";
 import { AppColors } from "@/lib/colors";
 import { formatSongFromApi } from "@/lib/song-format";
@@ -34,6 +34,8 @@ import {
   View,
 } from "react-native";
 import { withUniwind } from "uniwind";
+import { downloadManager } from "@/lib/vip-offline";
+import { isOfflinePlaybackAllowed, getDownloadSettings } from "@/lib/download-settings";
 
 const StyledIonicons = withUniwind(Ionicons);
 const { height } = Dimensions.get("window");
@@ -76,7 +78,9 @@ function PlaylistDetailsScreen() {
   } = usePlayer();
   const { isLikedSong, toggleLike } = useLikeSong();
   const insets = useSafeAreaInsets();
-  const { deletePlaylist, removeFromPlaylist, updatePlaylist } = useLibrary();
+  // Mutations only — avoids mounting useLibrary's 3 queries on every detail open.
+  const { deletePlaylist, removeFromPlaylist, updatePlaylist } =
+    usePlaylistMutations();
   const { toast } = useToast();
 
   const [isDescExpanded, setIsDescExpanded] = useState(false);
@@ -84,6 +88,13 @@ function PlaylistDetailsScreen() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editedName, setEditedName] = useState("");
   const [editedDescription, setEditedDescription] = useState("");
+  const [dlAllState, setDlAllState] = useState<{
+    status: "idle" | "downloading" | "completed" | "failed";
+    progress: number;
+    completed: number;
+    total: number;
+    error?: string;
+  }>({ status: "idle", progress: 0, completed: 0, total: 0 });
 
   const {
     data: playlist,
@@ -93,6 +104,7 @@ function PlaylistDetailsScreen() {
     queryKey: ["playlist", id],
     queryFn: () => apiClient.get(`/playlists/${id}`),
     enabled: !!id && !!token,
+    staleTime: 2 * 60 * 1000,
   });
 
   const songs: Song[] = useMemo(() => {
@@ -111,6 +123,73 @@ function PlaylistDetailsScreen() {
 
   const handleShare = () => {
     void shareEntity("playlist", playlist, { title: playlist.name });
+  };
+
+  const handleDownloadAll = async () => {
+    if (!token || songs.length === 0) return;
+    const allowed = await isOfflinePlaybackAllowed().catch(() => false);
+    if (!allowed) {
+      const settings = await getDownloadSettings().catch(() => null);
+      toast.show({
+        label: settings?.requireVip ? "VIP required for downloads" : "Downloads not allowed",
+        variant: "danger",
+      });
+      return;
+    }
+    setDlAllState({ status: "downloading", progress: 0, completed: 0, total: songs.length });
+    try {
+      for (let i = 0; i < songs.length; i++) {
+        const song = songs[i];
+        const fileInfo = await downloadManager.getDownloadedFile(song.id);
+        if (fileInfo) {
+          setDlAllState((s) => ({ ...s, completed: s.completed + 1, progress: Math.round(((s.completed + 1) / s.total) * 100) }));
+          continue;
+        }
+        await downloadManager.initiateDownload(song.id, song.audioUrl || song.playbackUrl || "");
+        setDlAllState((s) => ({ ...s, completed: s.completed + 1, progress: Math.round(((s.completed + 1) / s.total) * 100) }));
+      }
+      setDlAllState((s) => ({ ...s, status: "completed" }));
+      toast.show({ label: "Playlist downloaded", variant: "success" });
+    } catch (e: any) {
+      setDlAllState((s) => ({ ...s, status: "failed", error: e.message }));
+      toast.show({ label: "Download failed: " + e.message, variant: "danger" });
+    }
+  };
+
+  const renderDlAllButton = () => {
+    if (songs.length === 0) return null;
+    if (dlAllState.status === "downloading") {
+      return (
+        <TouchableOpacity
+          className="bg-primary rounded-full p-4"
+          activeOpacity={0.8}
+        >
+          <View className="flex-row items-center justify-center">
+            <Text className="text-white text-base font-bold mr-2">{dlAllState.progress}%</Text>
+            <StyledIonicons name="cloud-download" size={24} color="#fff" />
+          </View>
+        </TouchableOpacity>
+      );
+    }
+    if (dlAllState.status === "completed") {
+      return (
+        <TouchableOpacity
+          className="bg-green-500 rounded-full p-4"
+          activeOpacity={0.8}
+        >
+          <StyledIonicons name="checkmark-circle" size={24} color="#fff" />
+        </TouchableOpacity>
+      );
+    }
+    return (
+      <TouchableOpacity
+        onPress={handleDownloadAll}
+        className="bg-neutral-800 rounded-full p-4"
+        activeOpacity={0.8}
+      >
+        <StyledIonicons name="cloud-download-outline" size={24} color="#fff" />
+      </TouchableOpacity>
+    );
   };
 
   const handlePlaySong = (song: Song) => {
@@ -481,6 +560,8 @@ function PlaylistDetailsScreen() {
             >
               <StyledIonicons name="shuffle" size={24} color="#fff" />
             </TouchableOpacity>
+
+            {renderDlAllButton()}
 
             <TouchableOpacity
               onPress={() => {

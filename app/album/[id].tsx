@@ -20,6 +20,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, { useMemo, useRef, useState } from "react";
+import { useToast } from "heroui-native";
 import {
   Animated,
   Dimensions,
@@ -29,6 +30,8 @@ import {
   View,
 } from "react-native";
 import { withUniwind } from "uniwind";
+import { downloadManager } from "@/lib/vip-offline";
+import { isOfflinePlaybackAllowed, getDownloadSettings } from "@/lib/download-settings";
 
 const StyledIonicons = withUniwind(Ionicons);
 const { height } = Dimensions.get("window");
@@ -85,13 +88,22 @@ function AlbumDetailsScreen() {
   } = usePlayer();
   const [actionSong, setActionSong] = useState<Song | null>(null);
   const { isLikedSong, toggleLike } = useLikeSong();
+  const { toast } = useToast();
   const insets = useSafeAreaInsets();
   const [isDescExpanded, setIsDescExpanded] = useState(false);
+  const [dlAllState, setDlAllState] = useState<{
+    status: "idle" | "downloading" | "completed" | "failed";
+    progress: number;
+    completed: number;
+    total: number;
+    error?: string;
+  }>({ status: "idle", progress: 0, completed: 0, total: 0 });
 
   const { data: album, isLoading: albumLoading } = useQuery({
     queryKey: ["album", id],
     queryFn: () => apiClient.get(`/albums/${id}`),
     enabled: !!id && !!token,
+    staleTime: 5 * 60 * 1000,
   });
 
   const songs: Song[] = useMemo(() => {
@@ -127,6 +139,73 @@ function AlbumDetailsScreen() {
 
   const handleShare = () => {
     void shareEntity("album", album, { title: album.name });
+  };
+
+  const handleDownloadAll = async () => {
+    if (!token || songs.length === 0) return;
+    const allowed = await isOfflinePlaybackAllowed().catch(() => false);
+    if (!allowed) {
+      const settings = await getDownloadSettings().catch(() => null);
+      toast.show({
+        label: settings?.requireVip ? "VIP required for downloads" : "Downloads not allowed",
+        variant: "danger",
+      });
+      return;
+    }
+    setDlAllState({ status: "downloading", progress: 0, completed: 0, total: songs.length });
+    try {
+      for (let i = 0; i < songs.length; i++) {
+        const song = songs[i];
+        const fileInfo = await downloadManager.getDownloadedFile(song.id);
+        if (fileInfo) {
+          setDlAllState((s) => ({ ...s, completed: s.completed + 1, progress: Math.round(((s.completed + 1) / s.total) * 100) }));
+          continue;
+        }
+        await downloadManager.initiateDownload(song.id, song.audioUrl || song.playbackUrl || "");
+        setDlAllState((s) => ({ ...s, completed: s.completed + 1, progress: Math.round(((s.completed + 1) / s.total) * 100) }));
+      }
+      setDlAllState((s) => ({ ...s, status: "completed" }));
+      toast.show({ label: "Album downloaded", variant: "success" });
+    } catch (e: any) {
+      setDlAllState((s) => ({ ...s, status: "failed", error: e.message }));
+      toast.show({ label: "Download failed: " + e.message, variant: "danger" });
+    }
+  };
+
+  const renderDlAllButton = () => {
+    if (songs.length === 0) return null;
+    if (dlAllState.status === "downloading") {
+      return (
+        <TouchableOpacity
+          className="bg-primary rounded-full p-4"
+          activeOpacity={0.8}
+        >
+          <View className="flex-row items-center justify-center">
+            <Text className="text-white text-base font-bold mr-2">{dlAllState.progress}%</Text>
+            <StyledIonicons name="cloud-download" size={24} color="#fff" />
+          </View>
+        </TouchableOpacity>
+      );
+    }
+    if (dlAllState.status === "completed") {
+      return (
+        <TouchableOpacity
+          className="bg-green-500 rounded-full p-4"
+          activeOpacity={0.8}
+        >
+          <StyledIonicons name="checkmark-circle" size={24} color="#fff" />
+        </TouchableOpacity>
+      );
+    }
+    return (
+      <TouchableOpacity
+        onPress={handleDownloadAll}
+        className="bg-neutral-800 rounded-full p-4"
+        activeOpacity={0.8}
+      >
+        <StyledIonicons name="cloud-download-outline" size={24} color="#fff" />
+      </TouchableOpacity>
+    );
   };
 
   if (albumLoading) {
@@ -445,6 +524,8 @@ function AlbumDetailsScreen() {
             >
               <StyledIonicons name="shuffle" size={24} color="#fff" />
             </TouchableOpacity>
+
+            {renderDlAllButton()}
 
             <TouchableOpacity
               onPress={handleShare}

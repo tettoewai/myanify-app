@@ -159,6 +159,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const currentSongRef = useRef<Song | null>(null);
   const upNextRef = useRef<QueueItem[]>([]);
   const currentTimeRef = useRef(0);
+  const queueRef = useRef<Song[]>([]);
+  const recentlyPlayedCacheRef = useRef<Song[]>([]);
+  const applyUpNextRef = useRef<(items: QueueItem[]) => void>(() => {});
+  const restoreInProgressRef = useRef(false);
+  const historyFetchedForTokenRef = useRef<string | null>(null);
 
   const loadSource = useCallback(
     (uri: string) => {
@@ -191,6 +196,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     upNextRef.current = upNext;
   }, [upNext]);
+
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
+
+  useEffect(() => {
+    recentlyPlayedCacheRef.current = recentlyPlayedCache;
+  }, [recentlyPlayedCache]);
 
   useEffect(() => {
     currentSongRef.current = currentSong;
@@ -235,6 +248,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     },
     [isShuffled, persistUserUpNext, syncLegacyQueue],
   );
+
+  useEffect(() => {
+    applyUpNextRef.current = applyUpNext;
+  }, [applyUpNext]);
 
   const markSongSeen = useCallback((songId: string) => {
     seenSongIdsRef.current.add(songId);
@@ -509,16 +526,31 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [playableUri]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      historyFetchedForTokenRef.current = null;
+      return;
+    }
+    // Fetch once per login — previously re-ran on every token-object change
+    // and duplicated GET /home.recentlyPlayed + see-all history.
+    if (historyFetchedForTokenRef.current === token) return;
+    historyFetchedForTokenRef.current = token;
+    let cancelled = false;
     apiClient
       .get("/play-history?limit=50")
       .then((data) => {
+        if (cancelled) return;
         const raw = data?.data || data || [];
         setRecentlyPlayedCache(
           (Array.isArray(raw) ? raw : []).map(formatSongFromApi),
         );
       })
-      .catch(() => {});
+      .catch(() => {
+        // Allow retry on next mount if this attempt failed.
+        if (!cancelled) historyFetchedForTokenRef.current = null;
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   useEffect(() => {
@@ -547,7 +579,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setIsResolvingSource(true);
     setError(null);
 
-    resolvePlayableAudioUri(streamUrl)
+            resolvePlayableAudioUri(streamUrl, currentSong.id)
       .then((uri) => {
         if (!cancelled) loadSource(uri);
       })
@@ -624,10 +656,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const resolveSongById = useCallback(
     async (id: string): Promise<Song | null> => {
-      const fromQueue = queue.find((s) => s.id === id);
+      // Stable (no state deps) — reads refs so the restore effect below
+      // doesn't retrigger on every queue/cache change.
+      const fromQueue = queueRef.current.find((s) => s.id === id);
       if (fromQueue) return fromQueue;
 
-      const fromRecent = recentlyPlayedCache.find((s) => s.id === id);
+      const fromRecent = recentlyPlayedCacheRef.current.find(
+        (s) => s.id === id,
+      );
       if (fromRecent) return fromRecent;
 
       try {
@@ -638,17 +674,27 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         return null;
       }
     },
-    [queue, recentlyPlayedCache],
+    [],
   );
 
   useEffect(() => {
     if (!token) {
       hasRestoredRef.current = false;
+      restoreInProgressRef.current = false;
     }
   }, [token]);
 
   useEffect(() => {
-    if (!token || currentSong || hasRestoredRef.current) return;
+    // Runs once per login. Previously depended on queue/cache/resolveSongById
+    // (new identity on every change) so restore() re-fired repeatedly and
+    // issued N sequential GET /songs/:id. Now deps are [token] only.
+    if (!token) return;
+    if (hasRestoredRef.current || restoreInProgressRef.current) return;
+    if (currentSongRef.current) {
+      hasRestoredRef.current = true;
+      return;
+    }
+    restoreInProgressRef.current = true;
 
     const restore = async () => {
       try {
@@ -656,32 +702,37 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (raw) {
           const entries = JSON.parse(raw) as PersistedQueueEntry[];
           const restored = restoreUserUpNext(entries, (id) => {
-            const fromQueue = queue.find((s) => s.id === id);
+            const fromQueue = queueRef.current.find((s) => s.id === id);
             if (fromQueue) return fromQueue;
-            return recentlyPlayedCache.find((s) => s.id === id);
+            return recentlyPlayedCacheRef.current.find((s) => s.id === id);
           });
-          if (restored.length < entries.length) {
-            for (const entry of entries) {
-              if (restored.some((item) => item.song.id === entry.songId)) {
-                continue;
-              }
-              const song = await resolveSongById(entry.songId);
-              if (song) restored.push(createQueueItem(song, entry.source));
+          const missing = entries.filter(
+            (entry) =>
+              !restored.some((item) => item.song.id === entry.songId),
+          );
+          if (missing.length > 0) {
+            // Parallel instead of for-await sequential N+1.
+            const settled = await Promise.all(
+              missing.map(async (entry) => {
+                const song = await resolveSongById(entry.songId);
+                return song
+                  ? createQueueItem(song, entry.source)
+                  : null;
+              }),
+            );
+            for (const item of settled) {
+              if (item) restored.push(item);
             }
           }
-          if (restored.length > 0) applyUpNext(restored);
+          if (restored.length > 0) applyUpNextRef.current(restored);
         }
 
         const lastId = await SecureStore.getItemAsync(LAST_PLAYED_SONG_KEY);
-        if (!lastId) {
-          hasRestoredRef.current = true;
-          return;
-        }
+        if (!lastId) return;
 
         const last = await resolveSongById(lastId);
         if (!last) return;
 
-        hasRestoredRef.current = true;
         setCurrentSong(last);
         setQueue((prev) =>
           prev.some((s) => s.id === last.id) ? prev : [last, ...prev],
@@ -705,20 +756,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (e) {
-        hasRestoredRef.current = true;
         console.error("Restore error:", e);
+      } finally {
+        // Always mark done so a missing/failed song can't retry-loop.
+        hasRestoredRef.current = true;
+        restoreInProgressRef.current = false;
       }
     };
 
     void restore();
-  }, [
-    token,
-    currentSong,
-    queue,
-    recentlyPlayedCache,
-    applyUpNext,
-    resolveSongById,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   useEffect(() => {
     if (!currentSong || !upNext[0] || duration <= 0) return;
@@ -728,7 +776,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (preloadedQidRef.current === next.qid) return;
     const url = getSongStreamUrl(next.song);
     if (!url) return;
-    resolvePlayableAudioUri(url)
+    resolvePlayableAudioUri(url, next.song.id)
       .then((uri) => {
         preloadUriRef.current = uri;
         preloadedQidRef.current = next.qid;
@@ -1292,7 +1340,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (currentSong) {
           const streamUrl = getSongStreamUrl(currentSong);
           if (streamUrl) {
-            resolvePlayableAudioUri(streamUrl)
+    resolvePlayableAudioUri(streamUrl, currentSong?.id)
               .then((uri) => {
                 loadSource(uri);
                 setTimeout(() => {

@@ -3,9 +3,11 @@ import { shareEntity } from "@/lib/share";
 import type { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React from "react";
-import { Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
+import React, { useState } from "react";
+import { Modal, Pressable, Text, TouchableOpacity, View, ActivityIndicator, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSongDownload } from "@/hooks/useSongDownload";
+import { useToast } from "heroui-native";
 
 interface SongActionSheetProps {
   song: Song | null;
@@ -18,13 +20,23 @@ export function SongActionSheet({
   visible,
   onClose,
 }: SongActionSheetProps) {
+  if (!song) return null;
+
   const insets = useSafeAreaInsets();
   const { playSong, playNextInQueue, addToQueue, startRadio, isSongQueued } =
     usePlayer();
-
-  if (!song) return null;
+  const { toast } = useToast();
+  const { state, isDownloaded, download, remove } = useSongDownload(
+    song.id,
+    song.audioUrl || song.playbackUrl || "",
+  );
+  const [removing, setRemoving] = useState(false);
 
   const queued = isSongQueued(song.id);
+
+  const isDownloading = state.status === "downloading";
+  const isFailed = state.status === "failed";
+  const notAllowed = state.status === "not-allowed";
 
   const actions = [
     {
@@ -67,6 +79,42 @@ export function SongActionSheet({
         onClose();
       },
     },
+    {
+      label: isDownloaded
+        ? "Downloaded ✓"
+        : isDownloading
+        ? `Downloading ${state.progress}%`
+        : isFailed
+        ? `Failed: ${state.error || "Retry"}`
+        : notAllowed
+        ? state.error || "VIP required"
+        : "Download",
+      icon: isDownloaded
+        ? ("checkmark-circle" as const)
+        : isDownloading
+        ? ("cloud-download" as const)
+        : isFailed
+        ? ("alert-circle" as const)
+        : notAllowed
+        ? ("lock-closed" as const)
+        : ("cloud-download-outline" as const),
+      onPress: isDownloaded
+        ? async () => {
+            setRemoving(true);
+            await remove();
+            setRemoving(false);
+            onClose();
+          }
+        : isDownloading || notAllowed
+        ? undefined
+        : isFailed
+        ? () => {
+            void download();
+          }
+        : () => {
+            void download();
+          },
+    },
   ];
 
   return (
@@ -93,19 +141,33 @@ export function SongActionSheet({
         >
           {song.artist || song.artists?.map((a) => a.artist.name).join(", ")}
         </Text>
-        {actions.map((action) => (
-          <TouchableOpacity
-            key={action.label}
-            className="flex-row items-center gap-4 py-3.5 px-2"
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              action.onPress();
-            }}
-          >
-            <Ionicons name={action.icon} size={22} color="#d4a574" />
-            <Text className="text-base text-foreground">{action.label}</Text>
-          </TouchableOpacity>
-        ))}
+        {actions.map((action) => {
+          const disabled = !action.onPress || removing;
+          const isDownloadAction = action.label.startsWith("Download") || 
+            action.label.startsWith("Downloading") || 
+            action.label.startsWith("Downloaded") ||
+            action.label.startsWith("Failed");
+          return (
+            <TouchableOpacity
+              key={action.label}
+              className={`flex-row items-center gap-4 py-3.5 px-2 ${disabled ? "opacity-50" : ""}`}
+              onPress={() => {
+                if (!disabled) {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  action.onPress?.();
+                }
+              }}
+              disabled={disabled}
+            >
+              {isDownloadAction && isDownloading ? (
+                <ActivityIndicator size="small" color="#d4a574" />
+              ) : (
+                <Ionicons name={action.icon} size={22} color="#d4a574" />
+              )}
+              <Text className="text-base text-foreground">{action.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
         <TouchableOpacity
           className="py-3.5 px-2 mt-2 border-t border-border"
           onPress={onClose}
