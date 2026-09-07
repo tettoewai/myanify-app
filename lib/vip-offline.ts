@@ -78,19 +78,40 @@ export async function validateLicense(): Promise<boolean> {
 
     const deviceId = await getDeviceId();
     const licenseKey = await getLicenseKey();
-    
+
     if (!licenseKey) {
       return false;
     }
-    
+
     const response = await apiClient.post("/vip/devices/validate", {
       deviceId,
       licenseKey,
     });
-    
+
     return response.valid === true;
   } catch (error) {
     console.error("License validation error:", error);
+    return false;
+  }
+}
+
+// Ensure this device has a valid license, registering first-run devices.
+// Returns true when downloads may proceed.
+export async function ensureDeviceRegistered(
+  deviceName?: string
+): Promise<boolean> {
+  try {
+    const settings = await getDownloadSettings().catch(() => null);
+    if (settings && !settings.requireVip) return true;
+
+    if (await validateLicense()) return true;
+
+    // No (or invalid) license — register, then re-validate.
+    // registerDevice throws with server message (non-VIP, device limit, …).
+    await registerDevice(deviceName);
+    return await validateLicense();
+  } catch (error) {
+    console.error("Ensure device registration error:", error);
     return false;
   }
 }
@@ -129,8 +150,10 @@ export class OfflineDownloadManager {
       return fileUri;
     }
 
-    // Validate license before downloading (skipped when VIP not required)
-    const isValid = await validateLicense();
+    // Validate license before downloading (skipped when VIP not required).
+    // First-run devices have no license yet — register lazily here so
+    // downloads work without a separate registration step.
+    const isValid = await ensureDeviceRegistered();
     if (!isValid) {
       const settings = await getDownloadSettings().catch(() => null);
       if (settings && !settings.requireVip) {
@@ -204,10 +227,9 @@ export class OfflineDownloadManager {
         throw new Error("Download failed: No URI returned");
       }
     } catch (error: any) {
-      // Update server - download failed
-      await apiClient.patch(`/vip/downloads/${songId}`, {
-        status: "FAILED",
-      }).catch(console.error);
+      // Update server - download failed. The [id] routes key by
+      // OfflineDownload row id, not songId — resolve it first.
+      await this.markServerDownloadFailed(songId).catch(() => {});
 
       const callback = this.progressCallbacks.get(songId);
       if (callback) {
@@ -261,9 +283,13 @@ export class OfflineDownloadManager {
       await FileSystem.deleteAsync(fileUri, { idempotent: true });
     }
 
-    // Delete from server
+    // Delete from server. The [id] routes key by OfflineDownload row id,
+    // not songId — resolve it first. Missing row = nothing to delete.
     try {
-      await apiClient.delete(`/vip/downloads/${songId}`);
+      const serverId = await this.getServerDownloadId(songId);
+      if (serverId) {
+        await apiClient.delete(`/vip/downloads/${serverId}`);
+      }
     } catch (error) {
       console.error("Failed to delete download on server:", error);
     }
@@ -291,13 +317,30 @@ export class OfflineDownloadManager {
     return files.filter(file => file.endsWith('.mp3'));
   }
 
-  private async updateDownloadProgress(songId: string, progress: number): Promise<void> {
-    // Find download record ID from server (simplified - in production, store download IDs)
+  private async getServerDownloadId(songId: string): Promise<string | null> {
     try {
       const downloads = await apiClient.get("/vip/downloads");
       const download = downloads.downloads?.find((d: any) => d.songId === songId);
-      if (download?.id) {
-        await apiClient.patch(`/vip/downloads/${download.id}`, {
+      return download?.id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async markServerDownloadFailed(songId: string): Promise<void> {
+    const serverId = await this.getServerDownloadId(songId);
+    if (!serverId) return;
+    await apiClient.patch(`/vip/downloads/${serverId}`, {
+      status: "FAILED",
+    });
+  }
+
+  private async updateDownloadProgress(songId: string, progress: number): Promise<void> {
+    // Find download record ID from server (simplified - in production, store download IDs)
+    try {
+      const serverId = await this.getServerDownloadId(songId);
+      if (serverId) {
+        await apiClient.patch(`/vip/downloads/${serverId}`, {
           progress,
           status: progress < 100 ? "DOWNLOADING" : "COMPLETED",
         });

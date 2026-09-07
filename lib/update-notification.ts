@@ -1,8 +1,9 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
-const UPDATE_CHANNEL_ID = "myanify-update";
+export const UPDATE_CHANNEL_ID = "myanify-update";
 const NOTIFICATION_ID = "myanify-apk-update";
+const AVAILABLE_NOTIFICATION_ID = "myanify-update-available";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -24,6 +25,23 @@ export async function ensureNotificationChannel() {
   });
 }
 
+/**
+ * Must be called once at startup (module scope of root layout) so update
+ * notifications are shown as a banner even while the app is foregrounded.
+ * Progress notifications stay silent — no sound/vibration/badge.
+ */
+export function setupUpdateNotifications() {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    }),
+  });
+}
+
 function channelTrigger() {
   return Platform.OS === "android" ? { channelId: UPDATE_CHANNEL_ID } : null;
 }
@@ -34,6 +52,23 @@ export async function requestUpdatePermission(): Promise<boolean> {
 
   const { status } = await Notifications.requestPermissionsAsync();
   return status === "granted";
+}
+
+export async function showUpdateAvailable(
+  version: string,
+  mandatory: boolean,
+  data: Record<string, string | number | boolean>,
+) {
+  const title = mandatory ? "Required update available" : "Update available";
+  const body = mandatory
+    ? `Myanify ${version} is required to continue using the app.`
+    : `Myanify ${version} is now available. Tap to update.`;
+
+  await Notifications.scheduleNotificationAsync({
+    identifier: AVAILABLE_NOTIFICATION_ID,
+    content: { title, body, data },
+    trigger: channelTrigger(),
+  });
 }
 
 export async function showDownloadProgress(

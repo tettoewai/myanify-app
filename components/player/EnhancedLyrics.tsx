@@ -43,6 +43,8 @@ interface EnhancedLyricsProps {
   isLoadingLyrics?: boolean;
   onClose: () => void;
   onSeek?: (time: number) => void;
+  isLiked?: boolean;
+  onToggleLike?: () => void;
 }
 
 // Memoized LyricItem - only re-renders when its specific props change
@@ -121,6 +123,8 @@ export function EnhancedLyrics({
   isLoadingLyrics = false,
   onClose,
   onSeek,
+  isLiked = false,
+  onToggleLike,
 }: EnhancedLyricsProps) {
   const [size, setSize] = useState<LyricSize>("medium");
   const [scrollOffset, setScrollOffset] = useState(0);
@@ -277,6 +281,26 @@ export function EnhancedLyrics({
           </Text>
         </View>
 
+        <TouchableOpacity
+          onPress={onToggleLike}
+          disabled={!onToggleLike}
+          accessibilityLabel="Like song"
+          style={{
+            width: 40,
+            height: 40,
+            backgroundColor: "rgba(255,255,255,0.1)",
+            borderRadius: 12,
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: 8,
+          }}
+        >
+          <StyledIonicons
+            name={isLiked ? "heart" : "heart-outline"}
+            size={20}
+            color={isLiked ? "#ff0000" : AppColors.iconOnDark}
+          />
+        </TouchableOpacity>
         <TouchableOpacity
           onPress={toggleFontSize}
           style={{

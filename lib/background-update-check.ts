@@ -3,7 +3,10 @@ import * as TaskManager from "expo-task-manager";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { apiClient } from "@/lib/api";
-import { ensureNotificationChannel } from "@/lib/update-notification";
+import {
+  ensureNotificationChannel,
+  showUpdateAvailable,
+} from "@/lib/update-notification";
 import * as Application from "expo-application";
 import { isAllowedApkUrl, verifyManifest } from "@/lib/update-verify";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -94,26 +97,13 @@ async function checkForUpdateInBackground(): Promise<BackgroundFetch.BackgroundF
       return BackgroundFetch.BackgroundFetchResult.NoData;
     }
 
-    const updateTitle = mandatory ? "Required update available" : "Update available";
-    const updateBody = mandatory
-      ? `Myanify ${manifest.version} is required to continue using the app.`
-      : `Myanify ${manifest.version} is now available. Tap to update.`;
-
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: updateTitle,
-        body: updateBody,
-        data: {
-          type: "apk-update",
-          status: "available",
-          version: manifest.version,
-          versionCode: manifest.versionCode,
-          mandatory,
-          apkUrl: manifest.apkUrl,
-        },
-        ...(Platform.OS === "android" ? { channelId: "myanify-update" } : {}),
-      },
-      trigger: null,
+    await showUpdateAvailable(manifest.version ?? "", mandatory, {
+      type: "apk-update",
+      status: "available",
+      version: manifest.version ?? "",
+      versionCode: manifest.versionCode,
+      mandatory,
+      apkUrl: manifest.apkUrl,
     });
 
     await setLastNotifiedVersion(latestVersionCode);

@@ -8,6 +8,7 @@ import { SongActionSheet } from "@/components/SongActionSheet";
 import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
 import { useLikeSong } from "@/hooks/useLikeSong";
+import { useAnnouncements } from "@/hooks/useAnnouncements";
 import { apiClient } from "@/lib/api";
 import { formatSongFromApi } from "@/lib/song-format";
 import { seeAllPath } from "@/lib/see-all-sections";
@@ -88,6 +89,7 @@ export default function Home() {
   const [actionSong, setActionSong] = useState<Song | null>(null);
   const { isLikedSong, toggleLike } = useLikeSong();
   const { token, isLoading: authLoading } = useAuth();
+  const { unreadCount } = useAnnouncements(10);
 
   const {
     data: homeData,
@@ -277,13 +279,21 @@ export default function Home() {
             <View className="flex-row gap-3">
               <TouchableOpacity
                 className="bg-white/10 p-2.5 rounded-full"
-                accessibilityLabel="Notifications"
+                accessibilityLabel="What's new"
+                onPress={() => router.push("/announcements")}
               >
                 <Ionicons
                   name="notifications-outline"
                   size={22}
                   color={AppColors.iconOnDark}
                 />
+                {unreadCount > 0 && (
+                  <View className="absolute -top-1 -right-1 h-5 min-w-5 px-1 items-center justify-center rounded-full bg-primary">
+                    <Text className="text-primary-foreground text-[11px] font-bold">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
               {/* <TouchableOpacity
                 className="bg-white/10 p-2.5 rounded-full"

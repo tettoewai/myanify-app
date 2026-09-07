@@ -21,6 +21,28 @@ export function useSongDownload(songId: string, audioUrl: string) {
   const [state, setState] = useState<DownloadState>({ status: "idle", progress: 0 });
   const [isDownloaded, setIsDownloaded] = useState(false);
 
+  const refresh = useCallback(async () => {
+    if (!songId || !token) {
+      setIsDownloaded(false);
+      return false;
+    }
+    const allowed = await isOfflinePlaybackAllowed().catch(() => false);
+    if (!allowed) {
+      setIsDownloaded(false);
+      setState((s) =>
+        s.status === "downloading" ? s : { status: "not-allowed", progress: 0 },
+      );
+      return false;
+    }
+    const file = await downloadManager.getDownloadedFile(songId);
+    const downloaded = !!file;
+    setIsDownloaded(downloaded);
+    if (downloaded) {
+      setState({ status: "completed", progress: 100 });
+    }
+    return downloaded;
+  }, [songId, token]);
+
   useEffect(() => {
     let mounted = true;
     const check = async () => {
@@ -76,5 +98,5 @@ export function useSongDownload(songId: string, audioUrl: string) {
     setState({ status: "idle", progress: 0 });
   }, [songId]);
 
-  return { state, isDownloaded, download, remove };
+  return { state, isDownloaded, download, remove, refresh };
 }

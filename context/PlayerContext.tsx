@@ -95,6 +95,9 @@ interface PlayerContextType {
   seekTo: (time: number) => void;
   getRecentlyPlayed: () => Song[];
   clearError: () => void;
+  sleepTimerEndsAt: number | null;
+  sleepTimerRemaining: number;
+  setSleepTimer: (minutes: number | null) => void;
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
@@ -134,6 +137,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [playableUri, setPlayableUri] = useState<string | undefined>(undefined);
   const [isResolvingSource, setIsResolvingSource] = useState(false);
   const [recentlyPlayedCache, setRecentlyPlayedCache] = useState<Song[]>([]);
+  const [sleepTimerEndsAt, setSleepTimerEndsAt] = useState<number | null>(null);
+  const [sleepTimerRemaining, setSleepTimerRemaining] = useState(0);
 
   const player = useAudioPlayer(null, { keepAudioSessionActive: true });
   const status = useAudioPlayerStatus(player);
@@ -162,6 +167,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const queueRef = useRef<Song[]>([]);
   const recentlyPlayedCacheRef = useRef<Song[]>([]);
   const applyUpNextRef = useRef<(items: QueueItem[]) => void>(() => {});
+  const sleepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sleepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restoreInProgressRef = useRef(false);
   const historyFetchedForTokenRef = useRef<string | null>(null);
 
@@ -1365,6 +1372,54 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const clearError = useCallback(() => setError(null), []);
 
+  const clearSleepTimer = useCallback(() => {
+    if (sleepTimeoutRef.current) {
+      clearTimeout(sleepTimeoutRef.current);
+      sleepTimeoutRef.current = null;
+    }
+    if (sleepIntervalRef.current) {
+      clearInterval(sleepIntervalRef.current);
+      sleepIntervalRef.current = null;
+    }
+    setSleepTimerEndsAt(null);
+    setSleepTimerRemaining(0);
+  }, []);
+
+  const setSleepTimer = useCallback(
+    (minutes: number | null) => {
+      clearSleepTimer();
+      if (minutes === null || minutes <= 0) return;
+      const endsAt = Date.now() + minutes * 60 * 1000;
+      setSleepTimerEndsAt(endsAt);
+      setSleepTimerRemaining(Math.round(minutes * 60));
+      sleepIntervalRef.current = setInterval(() => {
+        const remaining = Math.max(0, Math.round((endsAt - Date.now()) / 1000));
+        setSleepTimerRemaining(remaining);
+        if (remaining <= 0 && sleepIntervalRef.current) {
+          clearInterval(sleepIntervalRef.current);
+          sleepIntervalRef.current = null;
+        }
+      }, 1000);
+      sleepTimeoutRef.current = setTimeout(() => {
+        try {
+          player.pause();
+        } catch {
+          // Player may already be released.
+        }
+        setIsPlaying(false);
+        clearSleepTimer();
+      }, minutes * 60 * 1000);
+    },
+    [clearSleepTimer, player],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (sleepTimeoutRef.current) clearTimeout(sleepTimeoutRef.current);
+      if (sleepIntervalRef.current) clearInterval(sleepIntervalRef.current);
+    };
+  }, []);
+
   useLockScreenPlayer({
     player,
     song: currentSong,
@@ -1434,6 +1489,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         seekTo,
         getRecentlyPlayed,
         clearError,
+        sleepTimerEndsAt,
+        sleepTimerRemaining,
+        setSleepTimer,
       }}
     >
       {children}

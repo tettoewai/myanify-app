@@ -10,8 +10,11 @@ import { useAuth } from "@/context/AuthContext";
 import { useEffect, useState } from "react";
 import * as Notifications from "expo-notifications";
 import { registerBackgroundUpdateCheck } from "@/lib/background-update-check";
+import { setupUpdateNotifications } from "@/lib/update-notification";
 import "../global.css";
 import "@/lib/theme";
+
+setupUpdateNotifications();
 
 export default function RootLayout() {
   useEffect(() => {
@@ -37,7 +40,7 @@ export default function RootLayout() {
   const [dismissedVersionCode, setDismissedVersionCode] = useState<number | null>(null);
   const [dismissedOtaUpdateId, setDismissedOtaUpdateId] = useState<string | null>(null);
   const segments = useSegments();
-  const isAtBottom = ["artist", "album", "liked-songs", "see-all", "playlist"].some((s) =>
+  const isAtBottom = ["artist", "album", "liked-songs", "request-song", "see-all", "playlist", "announcements"].some((s) =>
     (segments as string[]).includes(s)
   );
 
@@ -199,6 +202,9 @@ export default function RootLayout() {
         <Stack.Screen name="genre/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="see-all/[section]" options={{ headerShown: false }} />
         <Stack.Screen name="liked-songs" options={{ headerShown: false }} />
+        <Stack.Screen name="downloads" options={{ headerShown: false }} />
+        <Stack.Screen name="request-song" options={{ headerShown: false }} />
+        <Stack.Screen name="announcements" options={{ headerShown: false }} />
         <Stack.Screen name="playlist/[id]" options={{ headerShown: false }} />
       </Stack>
 
@@ -213,7 +219,7 @@ export default function RootLayout() {
           mandatory={isMandatory}
           isDownloading={apkAvailable ? isDownloadingApk : otaDownloading}
           downloadStatus={downloadStatus}
-          downloadProgress={downloadProgress}
+          downloadProgress={apkAvailable ? downloadProgress : undefined}
           error={combinedError}
           onInstall={handleInstall}
           onLater={isMandatory ? undefined : handleLater}

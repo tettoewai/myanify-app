@@ -1,12 +1,10 @@
 import { StyledImage as Image } from "@/components/styled";
 import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
-import { useLikeSong } from "@/hooks/useLikeSong";
 import { AppColors } from "@/lib/colors";
 import { getSongCoverUrl } from "@/lib/song-cover";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useSegments } from "expo-router";
 import React, { useEffect } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
@@ -29,10 +27,8 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
     currentTime,
     duration,
     togglePlay,
-    nextSong,
   } = usePlayer();
 
-  const { isLikedSong, toggleLike } = useLikeSong();
   const animationDuration = 500;
 
   // Hide mini player when on the full player route or if no session
@@ -114,13 +110,10 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
 
   return (
     <Animated.View style={animatedStyle}>
-      <LinearGradient
-        colors={["rgba(26, 26, 26, 0.95)", AppColors.background]}
-        className="border-b-0 m-0 p-0"
-      >
+      <View className="overflow-hidden bg-[#1a1a1a]/95">
         {/* Progress Bar */}
-        <View className="h-[2px] bg-white/10">
-          <Animated.View
+        <View className="h-0.5 bg-white/10">
+          <View
             className="h-full bg-primary"
             style={{
               width: `${progress * 100}%`,
@@ -134,10 +127,10 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
           activeOpacity={0.9}
-          className="flex-row items-center px-4 py-3"
+          className="flex-row items-center px-3 py-2 gap-3"
         >
           {/* Album Art */}
-          <View className="w-14 h-14 rounded-lg overflow-hidden mr-3">
+          <View className="w-10 h-10 rounded-full overflow-hidden">
             <Image
               uri={getSongCoverUrl(currentSong)}
               variant="album"
@@ -147,16 +140,16 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
           </View>
 
           {/* Song Info */}
-          <View className="flex-1 mr-3">
+          <View className="flex-1">
             <Text
-              className="text-base font-semibold mb-1 leading-loose"
+              className="text-sm font-semibold leading-loose"
               style={{ color: AppColors.foreground }}
               numberOfLines={1}
             >
               {currentSong.title}
             </Text>
             <Text
-              className="text-sm leading-loose"
+              className="text-xs leading-loose"
               style={{ color: AppColors.mutedForeground }}
               numberOfLines={1}
             >
@@ -164,59 +157,23 @@ export function MiniPlayer({ bottomOffset }: { bottomOffset?: number }) {
             </Text>
           </View>
 
-          {/* Controls */}
-          <View className="flex-row items-center gap-2">
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation();
-                toggleLike(currentSong);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              className="p-2"
-            >
-              <Ionicons
-                name={isLikedSong(currentSong.id) ? "heart" : "heart-outline"}
-                size={24}
-                color={
-                  isLikedSong(currentSong.id)
-                    ? AppColors.primary
-                    : AppColors.iconOnDark
-                }
-              />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation();
-                togglePlay();
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              }}
-              className="p-2"
-            >
-              <Ionicons
-                name={isPlaying ? "pause" : "play"}
-                size={28}
-                color={AppColors.iconOnDark}
-              />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation();
-                nextSong();
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              className="p-2"
-            >
-              <Ionicons
-                name="play-skip-forward"
-                size={24}
-                color={AppColors.iconOnDark}
-              />
-            </TouchableOpacity>
-          </View>
+          {/* Play / Pause */}
+          <TouchableOpacity
+            onPress={(e) => {
+              e.stopPropagation();
+              togglePlay();
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }}
+            className="w-10 h-10 items-center justify-center rounded-full bg-primary"
+          >
+            <Ionicons
+              name={isPlaying ? "pause" : "play"}
+              size={20}
+              color="#fff"
+            />
+          </TouchableOpacity>
         </TouchableOpacity>
-      </LinearGradient>
+      </View>
     </Animated.View>
   );
 }

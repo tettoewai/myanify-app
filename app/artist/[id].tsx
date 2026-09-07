@@ -323,9 +323,9 @@ function ArtistDetailsScreen() {
 
         {/* Artist Info Card */}
         <View className="px-6 py-4">
-          <View className="flex-row items-center mb-3">
+          <View className="flex-row items-center">
             <Text
-              className="text-white text-5xl font-black flex-1 py-1 leading-loose"
+              className="text-white text-3xl font-black flex-1 py-1 leading-loose"
               numberOfLines={2}
             >
               {artist.name}

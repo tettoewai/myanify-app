@@ -2,6 +2,7 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { StyledImage as Image } from "@/components/styled";
 import { usePlayer } from "@/context/PlayerContext";
 import { UpNextSheet } from "@/components/player/UpNextSheet";
+import { MoreOptionsSheet } from "@/components/player/MoreOptionsSheet";
 import { EnhancedLyrics } from "@/components/player/EnhancedLyrics";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { getSongCoverUrl } from "@/lib/song-cover";
@@ -35,6 +36,8 @@ const StyledSlider = withUniwind(Slider);
 const { width } = Dimensions.get("window");
 const ART_SIZE = width * 0.75;
 
+type PlayMode = "sequential" | "repeat-all" | "repeat-one" | "shuffle";
+
 function splitLyricLines(text: string): string[] {
   return text
     .split(/\r?\n/)
@@ -66,11 +69,13 @@ export function FullPlayer() {
     clearError,
     upNext,
     radioMode,
+    sleepTimerRemaining,
   } = usePlayer();
 
   const { isLikedSong, toggleLike } = useLikeSong();
 
   const [showUpNext, setShowUpNext] = useState(false);
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
   const [isSliding, setIsSliding] = useState(false);
   const [slidingValue, setSlidingValue] = useState(0);
@@ -177,18 +182,59 @@ export function FullPlayer() {
     return index !== -1 ? lyrics[index] : null;
   }, [lyrics, currentTime]);
 
-  const toggleRepeat = useCallback(() => {
-    const modes: ("off" | "all" | "one")[] = ["off", "all", "one"];
-    const currentIndex = modes.indexOf(repeatMode);
-    const nextMode = modes[(currentIndex + 1) % modes.length];
-    setRepeatMode(nextMode);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, [repeatMode, setRepeatMode]);
+  const playMode: PlayMode = useMemo(() => {
+    if (isShuffled) return "shuffle";
+    if (repeatMode === "all") return "repeat-all";
+    if (repeatMode === "one") return "repeat-one";
+    return "sequential";
+  }, [isShuffled, repeatMode]);
 
-  const toggleShuffle = useCallback(() => {
-    setIsShuffled(!isShuffled);
+  const playModeConfig = useMemo(() => {
+    switch (playMode) {
+      case "repeat-all":
+        return { name: "repeat" as const, color: "#ff0000", showBadge: false };
+      case "repeat-one":
+        return { name: "repeat" as const, color: "#ff0000", showBadge: true };
+      case "shuffle":
+        return { name: "shuffle" as const, color: "#ff0000", showBadge: false };
+      case "sequential":
+      default:
+        return {
+          name: "repeat-outline" as const,
+          color: "#a3a3a3",
+          showBadge: false,
+        };
+    }
+  }, [playMode]);
+
+  const cyclePlayMode = useCallback(() => {
+    const order: PlayMode[] = [
+      "sequential",
+      "repeat-all",
+      "repeat-one",
+      "shuffle",
+    ];
+    const nextMode = order[(order.indexOf(playMode) + 1) % order.length];
+    switch (nextMode) {
+      case "sequential":
+        setIsShuffled(false);
+        setRepeatMode("off");
+        break;
+      case "repeat-all":
+        setIsShuffled(false);
+        setRepeatMode("all");
+        break;
+      case "repeat-one":
+        setIsShuffled(false);
+        setRepeatMode("one");
+        break;
+      case "shuffle":
+        setIsShuffled(true);
+        setRepeatMode("all");
+        break;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, [isShuffled, setIsShuffled]);
+  }, [playMode, setIsShuffled, setRepeatMode]);
 
   const handleSeekStart = useCallback((value: number) => {
     setSlidingValue(value);
@@ -279,32 +325,53 @@ export function FullPlayer() {
           </TouchableOpacity>
 
           {/* Song Info */}
-          <View className="px-8 mb-4 items-center">
-            <Text
-              className="text-white text-xl font-bold text-center leading-loose"
-              numberOfLines={2}
-            >
-              {currentSong.title || "Unknown Song"}
-            </Text>
-            <Text
-              className="text-primary text-base text-center leading-loose"
-              numberOfLines={1}
-            >
-              {getArtistName()}
-            </Text>
-            {upNext[0] && (
+          <View className="px-8 mb-4 flex-row items-center justify-between">
+            <View className="flex-1 mr-3">
               <Text
-                className="text-neutral-500 text-xs text-center mt-1 leading-loose"
+                className="text-white text-xl font-bold leading-relaxed"
+                numberOfLines={2}
+              >
+                {currentSong.title || "Unknown Song"}
+              </Text>
+              <Text
+                className="text-primary text-base leading-relaxed"
                 numberOfLines={1}
               >
-                Up next: {upNext[0].song.title}
+                {getArtistName()}
               </Text>
-            )}
-            {!upNext[0] && radioMode && (
-              <Text className="text-neutral-500 text-xs text-center mt-1">
-                Similar songs will follow
-              </Text>
-            )}
+              {upNext[0] && (
+                <Text
+                  className="text-neutral-500 text-xs mt-0.5 leading-normal"
+                  numberOfLines={1}
+                >
+                  Up next: {upNext[0].song.title}
+                </Text>
+              )}
+              {!upNext[0] && radioMode && (
+                <Text className="text-neutral-500 text-xs mt-0.5 leading-normal">
+                  Similar songs will follow
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity
+              onPress={handleLikeToggle}
+              className="p-2"
+              accessibilityLabel="Like song"
+            >
+              <StyledIonicons
+                name={
+                  currentSong?.id && isLikedSong(currentSong.id)
+                    ? "heart"
+                    : "heart-outline"
+                }
+                size={28}
+                color={
+                  currentSong?.id && isLikedSong(currentSong.id)
+                    ? "#ff0000"
+                    : "#fff"
+                }
+              />
+            </TouchableOpacity>
           </View>
 
           {/* Current Lyric Snippet */}
@@ -314,11 +381,11 @@ export function FullPlayer() {
               onPress={() => setShowLyrics(true)}
               className="px-8 mb-4"
             >
-              <View className="absolute -top-5 left-0 right-0 items-center">
+              {/* <View className="absolute -top-5 left-0 right-0 items-center">
                 <Text className="text-neutral-500 text-xs">
                   Tap for full lyrics ↑
                 </Text>
-              </View>
+              </View> */}
               {splitLyricLines(currentLyric.text).map((line, i) => (
                 <Text
                   key={i}
@@ -344,6 +411,8 @@ export function FullPlayer() {
             isLoadingLyrics={isLoadingLyrics}
             onClose={() => setShowLyrics(false)}
             onSeek={seekTo}
+            isLiked={!!(currentSong?.id && isLikedSong(currentSong.id))}
+            onToggleLike={handleLikeToggle}
           />
         </View>
       )}
@@ -370,31 +439,22 @@ export function FullPlayer() {
             </Text>
 
             <View className="flex-row items-center">
-              {!showLyrics && (
-                <TouchableOpacity
-                  onPress={() => setShowUpNext(true)}
-                  className="p-2 relative"
-                >
-                  <StyledIonicons name="list" size={26} color="#fff" />
-                  {radioMode && (
-                    <View className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
-                  )}
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity onPress={handleLikeToggle} className="p-2">
+              <TouchableOpacity
+                onPress={() => {
+                  setShowMoreOptions(true);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                className="p-2 relative"
+                accessibilityLabel="More options"
+              >
                 <StyledIonicons
-                  name={
-                    currentSong?.id && isLikedSong(currentSong.id)
-                      ? "heart"
-                      : "heart-outline"
-                  }
-                  size={26}
-                  color={
-                    currentSong?.id && isLikedSong(currentSong.id)
-                      ? "#ff0000"
-                      : "#fff"
-                  }
+                  name="ellipsis-vertical"
+                  size={24}
+                  color="#fff"
                 />
+                {sleepTimerRemaining > 0 && (
+                  <View className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+                )}
               </TouchableOpacity>
               {showLyrics && (
                 <TouchableOpacity
@@ -453,12 +513,29 @@ export function FullPlayer() {
 
             {/* Main Controls */}
             <View className="flex-row items-center justify-between px-10 mb-4">
-              <TouchableOpacity onPress={toggleShuffle} className="p-2">
+              <TouchableOpacity
+                onPress={cyclePlayMode}
+                className="p-2 items-center justify-center"
+                accessibilityLabel={`Play mode: ${playMode}. Tap to change.`}
+              >
                 <StyledIonicons
-                  name="shuffle"
+                  name={playModeConfig.name}
                   size={24}
-                  color={isShuffled ? "#ff0000" : "#a3a3a3"}
+                  color={playModeConfig.color}
                 />
+                {playModeConfig.showBadge && (
+                  <View
+                    className="absolute items-center justify-center"
+                    style={{ width: 24, height: 24 }}
+                  >
+                    <Text
+                      className="text-[8px] font-bold text-red-600"
+                      style={{ marginTop: 2 }}
+                    >
+                      1
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity onPress={prevSong} className="p-2">
@@ -485,27 +562,18 @@ export function FullPlayer() {
                 />
               </TouchableOpacity>
 
+              {/* Queue */}
               <TouchableOpacity
-                onPress={toggleRepeat}
-                className="p-2 items-center justify-center"
+                onPress={() => {
+                  setShowUpNext(true);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                className="p-2 relative items-center justify-center"
+                accessibilityLabel="Open queue"
               >
-                <StyledIonicons
-                  name={repeatMode === "off" ? "repeat-outline" : "repeat"}
-                  size={24}
-                  color={repeatMode !== "off" ? "#ff0000" : "#a3a3a3"}
-                />
-                {repeatMode === "one" && (
-                  <View
-                    className="absolute items-center justify-center"
-                    style={{ width: 24, height: 24 }}
-                  >
-                    <Text
-                      className="text-[8px] font-bold text-red-600"
-                      style={{ marginTop: 2 }}
-                    >
-                      1
-                    </Text>
-                  </View>
+                <StyledIonicons name="list" size={24} color="#a3a3a3" />
+                {radioMode && (
+                  <View className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
                 )}
               </TouchableOpacity>
             </View>
@@ -513,6 +581,10 @@ export function FullPlayer() {
       </View>
 
       <UpNextSheet visible={showUpNext} onClose={() => setShowUpNext(false)} />
+      <MoreOptionsSheet
+        visible={showMoreOptions}
+        onClose={() => setShowMoreOptions(false)}
+      />
     </View>
   );
 }

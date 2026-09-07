@@ -4,11 +4,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Application from "expo-application";
 import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
+import * as Notifications from "expo-notifications";
 import { apiClient } from "@/lib/api";
 import {
-  isAllowedApkUrl,
-  verifyManifest,
-} from "@/lib/update-verify";
+  EMPTY_APK_UPDATE,
+  fetchAvailableApkUpdate,
+  type ApkUpdateInfo,
+} from "@/lib/mobile-update";
 import {
   ensureNotificationChannel,
   requestUpdatePermission,
@@ -18,23 +20,7 @@ import {
   dismissUpdateNotification,
 } from "@/lib/update-notification";
 
-export interface ApkUpdateInfo {
-  version: string;
-  versionCode: number;
-  apkUrl: string;
-  notes: string;
-  mandatory: boolean;
-  available: boolean;
-  sha256?: string;
-  md5?: string;
-  fileSize?: number;
-  minVersionCode?: number;
-  rollout?: number;
-  certSha256?: string;
-  previousVersion?: string;
-  previousVersionCode?: number;
-  previousApkUrl?: string;
-}
+export type { ApkUpdateInfo };
 
 export type DownloadStatus = "idle" | "downloading" | "complete" | "error";
 
@@ -42,51 +28,6 @@ export interface DownloadProgress {
   totalBytes: number;
   writtenBytes: number;
   percent: number;
-}
-
-interface MobileReleaseManifest {
-  version?: string;
-  versionCode?: number;
-  apkUrl?: string;
-  notes?: string;
-  mandatory?: boolean;
-  sha256?: string;
-  md5?: string;
-  fileSize?: number;
-  minVersionCode?: number;
-  rollout?: number;
-  certSha256?: string;
-  previousVersion?: string;
-  previousVersionCode?: number;
-  previousApkUrl?: string;
-  signature?: string;
-}
-
-const ROLLOUT_ID_KEY = "@myanify:rollout-id";
-
-async function getRolloutId(): Promise<string> {
-  try {
-    const existing = await AsyncStorage.getItem(ROLLOUT_ID_KEY);
-    if (existing) return existing;
-    const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-    await AsyncStorage.setItem(ROLLOUT_ID_KEY, id);
-    return id;
-  } catch {
-    return "unknown";
-  }
-}
-
-function rolloutEligible(rolloutId: string, versionCode: number, rollout: number): boolean {
-  if (rollout >= 100) return true;
-  if (rollout <= 0) return false;
-  // FNV-1a 32-bit, deterministic per device+version (no WebCrypto dependency)
-  let h = 0x811c9dc5;
-  const s = `${rolloutId}:${versionCode}`;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h % 100 < rollout;
 }
 
 function reportEvent(
@@ -148,14 +89,7 @@ async function verifyDownloadedFile(
   }
 }
 
-const EMPTY_UPDATE: ApkUpdateInfo = {
-  version: "",
-  versionCode: 0,
-  apkUrl: "",
-  notes: "",
-  mandatory: false,
-  available: false,
-};
+const EMPTY_UPDATE: ApkUpdateInfo = EMPTY_APK_UPDATE;
 
 const DOWNLOAD_STATE_KEY = "@myanify:apk-download-state";
 const APK_LOCAL_PATH = "myanify-update.apk";
@@ -222,10 +156,26 @@ export function useApkUpdate() {
   const downloadVersionCodeRef = useRef<number | null>(null);
   const lastNotifyPercentRef = useRef(0);
   const lastNotifyTimeRef = useRef(0);
+  // Whether progress notifications may be shown. Mirrors the permission
+  // granted at download start; resume path refreshes it via getPermissionsAsync.
+  const notifyEnabledRef = useRef(true);
+  const progressRef = useRef<DownloadProgress>({
+    totalBytes: 0,
+    writtenBytes: 0,
+    percent: 0,
+  });
 
-  // Ensure notification channel exists on mount
+  const updateProgress = useCallback((p: DownloadProgress) => {
+    progressRef.current = p;
+    setDownloadProgress(p);
+  }, []);
+
+  // Ensure notification channel exists on mount + cache permission state
   useEffect(() => {
     void ensureNotificationChannel();
+    void Notifications.getPermissionsAsync().then(({ status }) => {
+      notifyEnabledRef.current = status === "granted";
+    });
   }, []);
 
   const throttledNotify = useCallback(
@@ -246,70 +196,34 @@ export function useApkUpdate() {
     setIsChecking(true);
     setError(null);
     try {
-      const manifest = (await apiClient.get(
-        "/mobile-update",
-      )) as MobileReleaseManifest;
+      const result = await fetchAvailableApkUpdate();
 
-      if (!manifest.versionCode || !manifest.apkUrl) {
+      if (result.status === "none") {
         setApkUpdate(EMPTY_UPDATE);
         return;
       }
 
-      const current = parseInt(Application.nativeBuildVersion ?? "0", 10);
-
-      // 1. Allowlist: only GitHub Release assets under our repo.
-      if (!isAllowedApkUrl(manifest.apkUrl)) {
-        console.warn("[useApkUpdate] rejected manifest: apkUrl not allowlisted");
-        reportEvent("download_error", current, manifest.versionCode, "apkUrl not allowlisted");
+      if (result.status === "rejected") {
+        console.warn(`[useApkUpdate] rejected manifest: ${result.reason}`);
+        reportEvent(
+          "download_error",
+          result.currentVersionCode,
+          result.latestVersionCode,
+          result.reason,
+        );
         setApkUpdate(EMPTY_UPDATE);
-        return;
-      }
-
-      // 2. Signature: fail-closed once a public key is baked into the build.
-      if (!verifyManifest(manifest)) {
-        console.warn("[useApkUpdate] rejected manifest: bad/missing signature");
-        reportEvent("download_error", current, manifest.versionCode, "bad manifest signature");
-        setApkUpdate(EMPTY_UPDATE);
-        setError("Update manifest failed verification. Please update later.");
-        return;
-      }
-
-      const latest = manifest.versionCode;
-      let available = latest > current;
-
-      // 3. Staged rollout: deterministic per-device gate.
-      if (available && manifest.rollout !== undefined && manifest.rollout < 100) {
-        const rolloutId = await getRolloutId();
-        if (!rolloutEligible(rolloutId, latest, manifest.rollout)) {
-          available = false;
+        if (result.reason === "bad manifest signature") {
+          setError("Update manifest failed verification. Please update later.");
         }
+        return;
       }
 
-      // 4. Minimum supported build: below minVersionCode => forced update.
-      const mandatory =
-        !!manifest.mandatory ||
-        (typeof manifest.minVersionCode === "number" &&
-          manifest.minVersionCode > current &&
-          latest > current);
-
-      setApkUpdate({
-        version: manifest.version ?? "",
-        versionCode: latest,
-        apkUrl: manifest.apkUrl,
-        notes: manifest.notes ?? "",
-        mandatory,
-        available,
-        sha256: manifest.sha256,
-        md5: manifest.md5,
-        fileSize: manifest.fileSize,
-        minVersionCode: manifest.minVersionCode,
-        rollout: manifest.rollout,
-        certSha256: manifest.certSha256,
-        previousVersion: manifest.previousVersion,
-        previousVersionCode: manifest.previousVersionCode,
-        previousApkUrl: manifest.previousApkUrl,
-      });
-      reportEvent(available ? "available" : "check", current, latest);
+      setApkUpdate(result.update);
+      reportEvent(
+        result.update.available ? "available" : "check",
+        result.currentVersionCode,
+        result.latestVersionCode,
+      );
     } catch (e) {
       console.warn("[useApkUpdate] check failed:", e);
     } finally {
@@ -317,21 +231,38 @@ export function useApkUpdate() {
     }
   }, []);
 
-  // Resume or detect completed download on mount / foreground
-  useEffect(() => {
-    void check();
-    const sub = AppState.addEventListener("change", (state: AppStateStatus) => {
-      if (
-        state === "active" &&
-        appStateRef.current.match(/inactive|background/)
-      ) {
-        void check();
-        void resumeOrDetectDownload();
+  const installApk = useCallback(async () => {
+    if (Platform.OS !== "android") return;
+
+    const localUri = `${FileSystem.cacheDirectory}${APK_LOCAL_PATH}`;
+    try {
+      const contentUri = await FileSystem.getContentUriAsync(localUri);
+      await IntentLauncher.startActivityAsync(
+        "android.intent.action.INSTALL_PACKAGE",
+        {
+          data: contentUri,
+          type: "application/vnd.android.package-archive",
+          flags: 1,
+        },
+      );
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Install failed";
+      setError(message);
+      console.warn("[useApkUpdate] install failed:", e);
+      const isPermissionError =
+        /install|unknown|permission/i.test(message) || message === "Install failed";
+      if (isPermissionError) {
+        try {
+          await IntentLauncher.startActivityAsync(
+            "android.settings.MANAGE_UNKNOWN_APP_SOURCES",
+            { data: `package:${Application.applicationId}` },
+          );
+        } catch {
+          // Intent to settings failed
+        }
       }
-      appStateRef.current = state;
-    });
-    return () => sub.remove();
-  }, [check]);
+    }
+  }, []);
 
   const resumeOrDetectDownload = useCallback(async () => {
     if (Platform.OS !== "android") return;
@@ -353,7 +284,7 @@ export function useApkUpdate() {
         return;
       }
       setDownloadStatus("complete");
-      setDownloadProgress({
+      updateProgress({
         totalBytes: saved.totalBytes,
         writtenBytes: saved.writtenBytes,
         percent: 100,
@@ -362,8 +293,16 @@ export function useApkUpdate() {
       return;
     }
 
-    if (downloadStatus === "downloading" && downloadRef.current) {
+    if (downloadRef.current) {
       return; // Already downloading
+    }
+
+    // Refresh permission — resume must not notify when denied.
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      notifyEnabledRef.current = status === "granted";
+    } catch {
+      // Keep last known value
     }
 
     const localUri = `${FileSystem.cacheDirectory}${APK_LOCAL_PATH}`;
@@ -378,17 +317,19 @@ export function useApkUpdate() {
                 (data.totalBytesWritten / data.totalBytesExpectedToWrite) * 100,
               )
             : 0;
-        setDownloadProgress({
+        updateProgress({
           totalBytes: data.totalBytesExpectedToWrite,
           writtenBytes: data.totalBytesWritten,
           percent: pct,
         });
-        void throttledNotify(
-          saved.version || `v${saved.versionCode}`,
-          pct,
-          data.totalBytesWritten,
-          data.totalBytesExpectedToWrite,
-        );
+        if (notifyEnabledRef.current) {
+          throttledNotify(
+            saved.version || `v${saved.versionCode}`,
+            pct,
+            data.totalBytesWritten,
+            data.totalBytesExpectedToWrite,
+          );
+        }
       },
     );
 
@@ -411,32 +352,67 @@ export function useApkUpdate() {
             verifyError instanceof Error ? verifyError.message : "Download failed";
           setError(message);
           setDownloadStatus("error");
-          void showDownloadError(message);
+          if (notifyEnabledRef.current) void showDownloadError(message);
           await clearDownloadState();
           return;
         }
         setDownloadStatus("complete");
-        setDownloadProgress((p) => ({
-          ...p,
+        updateProgress({
+          totalBytes: progressRef.current.totalBytes,
+          writtenBytes: progressRef.current.totalBytes,
           percent: 100,
-          writtenBytes: p.totalBytes,
-        }));
+        });
         await saveDownloadState({
           ...saved,
           status: "complete",
           writtenBytes: saved.totalBytes,
         });
-        void showDownloadComplete(saved.version || `v${saved.versionCode}`);
+        if (notifyEnabledRef.current) {
+          void showDownloadComplete(saved.version || `v${saved.versionCode}`);
+        }
         await installApk();
       }
     } catch (e) {
       console.warn("[useApkUpdate] resume failed:", e);
       setDownloadStatus("error");
       setError("Download interrupted. Tap Download to retry.");
-      void showDownloadError("Download interrupted. Tap Download to retry.");
+      if (notifyEnabledRef.current) {
+        void showDownloadError("Download interrupted. Tap Download to retry.");
+      }
       await clearDownloadState();
+    } finally {
+      downloadRef.current = null;
     }
-  }, [downloadStatus, throttledNotify]);
+  }, [throttledNotify, updateProgress, installApk]);
+
+  // Check + resume on mount; re-check + resume on foreground. Persist the
+  // latest progress when backgrounded so a killed app can resume after relaunch.
+  useEffect(() => {
+    void check();
+    void resumeOrDetectDownload();
+    const sub = AppState.addEventListener("change", (state: AppStateStatus) => {
+      const prev = appStateRef.current;
+      if (state === "active" && prev.match(/inactive|background/)) {
+        void check();
+        void resumeOrDetectDownload();
+      }
+      if (state.match(/inactive|background/) && downloadRef.current) {
+        // Best-effort snapshot so relaunch can continue from ~current offset.
+        const p = progressRef.current;
+        void loadDownloadState().then((saved) => {
+          if (saved && saved.status === "downloading") {
+            void saveDownloadState({
+              ...saved,
+              totalBytes: p.totalBytes || saved.totalBytes,
+              writtenBytes: p.writtenBytes || saved.writtenBytes,
+            });
+          }
+        });
+      }
+      appStateRef.current = state;
+    });
+    return () => sub.remove();
+  }, [check, resumeOrDetectDownload]);
 
   const downloadAndInstall = useCallback(async () => {
     if (Platform.OS !== "android" || !apkUpdate.apkUrl) return;
@@ -459,12 +435,13 @@ export function useApkUpdate() {
 
     // Request notification permission before starting download
     const hasPermission = await requestUpdatePermission();
+    notifyEnabledRef.current = hasPermission;
     const current = parseInt(Application.nativeBuildVersion ?? "0", 10);
     reportEvent("download_start", current, apkUpdate.versionCode);
 
     setError(null);
     setDownloadStatus("downloading");
-    setDownloadProgress({ totalBytes: 0, writtenBytes: 0, percent: 0 });
+    updateProgress({ totalBytes: 0, writtenBytes: 0, percent: 0 });
     downloadVersionCodeRef.current = apkUpdate.versionCode;
     lastNotifyPercentRef.current = 0;
     lastNotifyTimeRef.current = 0;
@@ -525,12 +502,12 @@ export function useApkUpdate() {
           adjustedExpected > 0
             ? Math.round((adjustedWritten / adjustedExpected) * 100)
             : 0;
-        setDownloadProgress({
+        updateProgress({
           totalBytes: adjustedExpected,
           writtenBytes: adjustedWritten,
           percent: pct,
         });
-        if (hasPermission) {
+        if (notifyEnabledRef.current) {
           throttledNotify(apkUpdate.version, pct, adjustedWritten, adjustedExpected);
         }
       },
@@ -547,12 +524,11 @@ export function useApkUpdate() {
         const finalSize = info.exists ? (info.size ?? 0) : 0;
 
         setDownloadStatus("complete");
-        setDownloadProgress((p) => ({
-          ...p,
+        updateProgress({
+          totalBytes: finalSize || progressRef.current.totalBytes,
+          writtenBytes: finalSize || progressRef.current.totalBytes,
           percent: 100,
-          writtenBytes: finalSize || p.totalBytes,
-          totalBytes: finalSize || p.totalBytes,
-        }));
+        });
 
         await saveDownloadState({
           version: apkUpdate.version,
@@ -567,7 +543,7 @@ export function useApkUpdate() {
           sha256: apkUpdate.sha256,
         });
 
-        void showDownloadComplete(apkUpdate.version);
+        if (notifyEnabledRef.current) void showDownloadComplete(apkUpdate.version);
         reportEvent(
           "download_complete",
           parseInt(Application.nativeBuildVersion ?? "0", 10),
@@ -585,7 +561,7 @@ export function useApkUpdate() {
       setError(message);
       setDownloadStatus("error");
       console.warn("[useApkUpdate] download failed:", e);
-      void showDownloadError(message);
+      if (notifyEnabledRef.current) void showDownloadError(message);
       reportEvent(
         "download_error",
         parseInt(Application.nativeBuildVersion ?? "0", 10),
@@ -598,40 +574,7 @@ export function useApkUpdate() {
     } finally {
       downloadRef.current = null;
     }
-  }, [apkUpdate, downloadStatus, downloadProgress.totalBytes, throttledNotify]);
-
-  const installApk = useCallback(async () => {
-    if (Platform.OS !== "android") return;
-
-    const localUri = `${FileSystem.cacheDirectory}${APK_LOCAL_PATH}`;
-    try {
-      const contentUri = await FileSystem.getContentUriAsync(localUri);
-      await IntentLauncher.startActivityAsync(
-        "android.intent.action.INSTALL_PACKAGE",
-        {
-          data: contentUri,
-          type: "application/vnd.android.package-archive",
-          flags: 1,
-        },
-      );
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Install failed";
-      setError(message);
-      console.warn("[useApkUpdate] install failed:", e);
-      const isPermissionError =
-        /install|unknown|permission/i.test(message) || message === "Install failed";
-      if (isPermissionError) {
-        try {
-          await IntentLauncher.startActivityAsync(
-            "android.settings.MANAGE_UNKNOWN_APP_SOURCES",
-            { data: `package:${Application.applicationId}` },
-          );
-        } catch {
-          // Intent to settings failed
-        }
-      }
-    }
-  }, []);
+  }, [apkUpdate, downloadStatus, throttledNotify, updateProgress, installApk]);
 
   const resetDownload = useCallback(async () => {
     if (downloadRef.current) {
@@ -644,10 +587,10 @@ export function useApkUpdate() {
     }
     await clearDownloadState();
     setDownloadStatus("idle");
-    setDownloadProgress({ totalBytes: 0, writtenBytes: 0, percent: 0 });
+    updateProgress({ totalBytes: 0, writtenBytes: 0, percent: 0 });
     setError(null);
     void dismissUpdateNotification();
-  }, []);
+  }, [updateProgress]);
 
   const clearError = useCallback(() => setError(null), []);
 

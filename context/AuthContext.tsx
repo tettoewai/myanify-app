@@ -92,6 +92,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (newToken: string) => {
     await authStorage.setToken(newToken);
     setToken(newToken);
+    // Best-effort device registration so first download doesn't fail with
+    // "Valid VIP license required". Lazy ensure in initiateDownload covers
+    // restarts; failures here must not block login.
+    try {
+      const { ensureDeviceRegistered } = await import("@/lib/vip-offline");
+      await ensureDeviceRegistered();
+    } catch (error) {
+      console.error("Device registration on sign-in failed:", error);
+    }
     router.replace("/(tabs)/home");
   };
 

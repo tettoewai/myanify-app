@@ -31,6 +31,7 @@ import {
 } from "react-native";
 import { withUniwind } from "uniwind";
 import { downloadManager } from "@/lib/vip-offline";
+import { showDownloadCompleteToast } from "@/lib/download-toast";
 import { isOfflinePlaybackAllowed, getDownloadSettings } from "@/lib/download-settings";
 
 const StyledIonicons = withUniwind(Ionicons);
@@ -165,7 +166,10 @@ function AlbumDetailsScreen() {
         setDlAllState((s) => ({ ...s, completed: s.completed + 1, progress: Math.round(((s.completed + 1) / s.total) * 100) }));
       }
       setDlAllState((s) => ({ ...s, status: "completed" }));
-      toast.show({ label: "Album downloaded", variant: "success" });
+      showDownloadCompleteToast(toast, router, {
+        label: "Album downloaded",
+        description: `${songs.length} songs available offline`,
+      });
     } catch (e: any) {
       setDlAllState((s) => ({ ...s, status: "failed", error: e.message }));
       toast.show({ label: "Download failed: " + e.message, variant: "danger" });

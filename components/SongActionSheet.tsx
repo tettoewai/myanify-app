@@ -1,9 +1,11 @@
 import { usePlayer } from "@/context/PlayerContext";
 import { shareEntity } from "@/lib/share";
+import { showDownloadCompleteToast } from "@/lib/download-toast";
 import type { Song } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, Text, TouchableOpacity, View, ActivityIndicator, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSongDownload } from "@/hooks/useSongDownload";
@@ -20,17 +22,30 @@ export function SongActionSheet({
   visible,
   onClose,
 }: SongActionSheetProps) {
-  if (!song) return null;
-
   const insets = useSafeAreaInsets();
   const { playSong, playNextInQueue, addToQueue, startRadio, isSongQueued } =
     usePlayer();
   const { toast } = useToast();
+  const router = useRouter();
   const { state, isDownloaded, download, remove } = useSongDownload(
-    song.id,
-    song.audioUrl || song.playbackUrl || "",
+    song?.id ?? "",
+    song?.audioUrl || song?.playbackUrl || "",
   );
   const [removing, setRemoving] = useState(false);
+  const prevDownloadStatus = useRef(state.status);
+
+  useEffect(() => {
+    const prev = prevDownloadStatus.current;
+    prevDownloadStatus.current = state.status;
+    if (prev === "downloading" && state.status === "completed" && song) {
+      showDownloadCompleteToast(toast, router, {
+        label: "Song downloaded",
+        description: song.title,
+      });
+    }
+  }, [state.status, song, toast, router]);
+
+  if (!song) return null;
 
   const queued = isSongQueued(song.id);
 

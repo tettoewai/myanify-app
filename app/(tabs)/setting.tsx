@@ -4,16 +4,26 @@ import {
   StyledSafeAreaView as SafeAreaView,
   StyledImage,
 } from "@/components/styled";
+import { UpdateModal } from "@/components/UpdateModal";
 import { useAuth } from "@/context/AuthContext";
 import { usePlayer } from "@/context/PlayerContext";
+import { useApkUpdate } from "@/hooks/useApkUpdate";
+import { useUpdateCheck } from "@/hooks/useUpdateCheck";
 import { apiClient } from "@/lib/api";
+import { getAppVersion, getVersionLabel } from "@/lib/app-version";
 import { AppColors } from "@/lib/colors";
+import { fetchAvailableApkUpdate } from "@/lib/mobile-update";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
+import { checkForUpdateAsync } from "expo-updates";
 import { Button, Card, Dialog, useToast } from "heroui-native";
 import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Platform,
   ScrollView,
   Switch,
   Text,
@@ -33,20 +43,14 @@ interface UserProfile {
   hasPassword: boolean;
 }
 
-interface SongRequest {
-  id: string;
-  songTitle: string;
-  artistName: string;
-  notes: string | null;
-  status: "PENDING" | "APPROVED" | "REJECTED";
-  createdAt: string;
-}
+const LAST_UPDATE_CHECK_KEY = "@myanify:last-manual-update-check";
 
 export default function Setting() {
   const { signOut, token, isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const { currentSong } = usePlayer();
   const { toast } = useToast();
+  const router = useRouter();
 
   // Local state for form fields
   const [name, setName] = useState("");
@@ -129,61 +133,100 @@ export default function Setting() {
     updateProfileMutation.mutate({ name });
   };
 
-  // Song request form state
-  const [requestSongTitle, setRequestSongTitle] = useState("");
-  const [requestArtistName, setRequestArtistName] = useState("");
-  const [requestNotes, setRequestNotes] = useState("");
+  // Manual update check (APK on Android + OTA everywhere)
+  const {
+    apkUpdate,
+    downloadProgress: apkDownloadProgress,
+    downloadStatus: apkDownloadStatus,
+    downloadAndInstall: downloadAndInstallApk,
+    error: apkUpdateError,
+    check: checkApkUpdate,
+    clearError: clearApkUpdateError,
+  } = useApkUpdate();
+  const {
+    isUpdateAvailable: isOtaUpdateAvailable,
+    isDownloading: isOtaDownloading,
+    download: downloadOtaUpdate,
+  } = useUpdateCheck();
+  const [isManualChecking, setIsManualChecking] = useState(false);
+  const [manualUpdateVisible, setManualUpdateVisible] = useState(false);
+  const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
 
-  // Fetch song requests
-  const { data: songRequestsData, refetch: refetchRequests } = useQuery<{
-    data: SongRequest[];
-  }>({
-    queryKey: ["song-requests"],
-    queryFn: () => apiClient.get("/song-requests"),
-    enabled: !!token,
-    staleTime: 2 * 60 * 1000,
-  });
+  useEffect(() => {
+    AsyncStorage.getItem(LAST_UPDATE_CHECK_KEY)
+      .then((v) => {
+        if (v) setLastCheckedAt(v);
+      })
+      .catch(() => {});
+  }, []);
 
-  // Submit song request mutation
-  const submitRequestMutation = useMutation({
-    mutationFn: (data: { songTitle: string; artistName: string; notes?: string }) =>
-      apiClient.post("/song-requests", data),
-    onSuccess: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      toast.show({
-        label: "Song request submitted!",
-        variant: "success",
-      });
-      setRequestSongTitle("");
-      setRequestArtistName("");
-      setRequestNotes("");
-      refetchRequests();
-    },
-    onError: (error: any) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      toast.show({
-        label: error.message || "Failed to submit request",
-        variant: "danger",
-      });
-    },
-  });
-
-  const handleSubmitSongRequest = () => {
-    if (!requestSongTitle.trim() || !requestArtistName.trim()) {
-      toast.show({
-        label: "Song title and artist name are required",
-        variant: "danger",
-      });
-      return;
-    }
-    submitRequestMutation.mutate({
-      songTitle: requestSongTitle.trim(),
-      artistName: requestArtistName.trim(),
-      notes: requestNotes.trim() || undefined,
-    });
+  const recordLastChecked = () => {
+    const now = new Date().toISOString();
+    setLastCheckedAt(now);
+    AsyncStorage.setItem(LAST_UPDATE_CHECK_KEY, now).catch(() => {});
   };
 
-  const songRequests = songRequestsData?.data || [];
+  const handleCheckForUpdates = async () => {
+    if (isManualChecking) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsManualChecking(true);
+    try {
+      // 1. Native APK update (Android only) — same rules as automatic checks.
+      if (Platform.OS === "android") {
+        const result = await fetchAvailableApkUpdate();
+        if (result.status === "ok" && result.update.available) {
+          // Sync the hook state so the modal can download + install.
+          await checkApkUpdate();
+          recordLastChecked();
+          setManualUpdateVisible(true);
+          return;
+        }
+        if (result.status === "rejected") {
+          toast.show({
+            label: "Update check failed verification. Please try again later.",
+            variant: "danger",
+          });
+          return;
+        }
+      }
+
+      // 2. Over-the-air JS update (all platforms, production builds only).
+      if (!__DEV__) {
+        try {
+          const ota = await checkForUpdateAsync();
+          if (ota.isAvailable || isOtaUpdateAvailable) {
+            recordLastChecked();
+            toast.show({
+              label: "Update found — downloading…",
+              variant: "success",
+            });
+            await downloadOtaUpdate().catch(() => {});
+            return;
+          }
+        } catch {
+          toast.show({
+            label:
+              "Couldn't check for updates. Check your connection and try again.",
+            variant: "danger",
+          });
+          return;
+        }
+      }
+
+      recordLastChecked();
+      toast.show({
+        label: `You're up to date (v${getAppVersion()})`,
+        variant: "success",
+      });
+    } catch {
+      toast.show({
+        label: "Couldn't check for updates. Check your connection and try again.",
+        variant: "danger",
+      });
+    } finally {
+      setIsManualChecking(false);
+    }
+  };
 
   const handleSignOut = () => {
     showDialog(
@@ -496,111 +539,91 @@ export default function Setting() {
             </TouchableOpacity>
           </Card>
 
+          {/* What's New Section */}
+          <Card className="mb-4 p-4 bg-card border border-border">
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/announcements");
+              }}
+              className="flex-row items-center justify-between py-2"
+            >
+              <View className="flex-row items-center flex-1">
+                <Ionicons
+                  name="notifications-outline"
+                  size={20}
+                  color="#ff0000"
+                  style={{ marginRight: 12 }}
+                />
+                <View className="flex-1">
+                  <Text className="text-foreground font-medium">
+                    What&apos;s New
+                  </Text>
+                  <Text className="text-muted-foreground text-xs mt-0.5">
+                    Announcements and app updates
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#666" />
+            </TouchableOpacity>
+          </Card>
+
           {/* Song Requests Section */}
           <Card className="mb-4 p-4 bg-card border border-border">
-            <Text className="text-lg font-bold text-foreground mb-4">
-              Song Requests
-            </Text>
-
-            <View className="mb-4">
-              <Text className="text-foreground font-medium mb-2">
-                Song Title *
-              </Text>
-              <TextInput
-                value={requestSongTitle}
-                onChangeText={setRequestSongTitle}
-                placeholder="e.g. မနှင်းဆီ"
-                placeholderTextColor={AppColors.placeholder}
-                style={{ color: AppColors.foreground }}
-                className="bg-background border border-border rounded-lg px-4 py-3"
-              />
-            </View>
-
-            <View className="mb-4">
-              <Text className="text-foreground font-medium mb-2">
-                Artist Name *
-              </Text>
-              <TextInput
-                value={requestArtistName}
-                onChangeText={setRequestArtistName}
-                placeholder="e.g. လွှမ်းမိုး"
-                placeholderTextColor={AppColors.placeholder}
-                style={{ color: AppColors.foreground }}
-                className="bg-background border border-border rounded-lg px-4 py-3"
-              />
-            </View>
-
-            <View className="mb-4">
-              <Text className="text-foreground font-medium mb-2">
-                Notes (optional)
-              </Text>
-              <TextInput
-                value={requestNotes}
-                onChangeText={setRequestNotes}
-                placeholder="YouTube link, version, etc."
-                placeholderTextColor={AppColors.placeholder}
-                style={{ color: AppColors.foreground }}
-                className="bg-background border border-border rounded-lg px-4 py-3"
-              />
-            </View>
-
-            <Button
-              onPress={handleSubmitSongRequest}
-              isDisabled={
-                submitRequestMutation.isPending ||
-                !requestSongTitle.trim() ||
-                !requestArtistName.trim()
-              }
-              className="w-full"
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/request-song");
+              }}
+              className="flex-row items-center justify-between py-2"
             >
-              <Button.Label>
-                {submitRequestMutation.isPending ? "Submitting..." : "Submit Request"}
-              </Button.Label>
-            </Button>
-
-            {songRequests.length > 0 && (
-              <View className="mt-4 pt-4 border-t border-border">
-                <Text className="text-foreground font-medium mb-3">
-                  Your Requests
-                </Text>
-                {songRequests.map((request) => (
-                  <View
-                    key={request.id}
-                    className="flex-row items-center justify-between py-3 border-b border-border last:border-b-0"
-                  >
-                    <View className="flex-1 mr-3">
-                      <Text className="text-foreground font-medium" numberOfLines={1}>
-                        {request.songTitle}
-                      </Text>
-                      <Text className="text-muted-foreground text-sm" numberOfLines={1}>
-                        {request.artistName}
-                      </Text>
-                    </View>
-                    <View
-                      className={`px-2 py-1 rounded-full ${
-                        request.status === "PENDING"
-                          ? "bg-amber-500/20"
-                          : request.status === "APPROVED"
-                            ? "bg-emerald-500/20"
-                            : "bg-danger/20"
-                      }`}
-                    >
-                      <Text
-                        className={`text-xs font-medium ${
-                          request.status === "PENDING"
-                            ? "text-amber-500"
-                            : request.status === "APPROVED"
-                              ? "text-emerald-500"
-                              : "text-danger"
-                        }`}
-                      >
-                        {request.status.charAt(0) + request.status.slice(1).toLowerCase()}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
+              <View className="flex-row items-center flex-1">
+                <Ionicons
+                  name="musical-notes-outline"
+                  size={20}
+                  color="#ff0000"
+                  style={{ marginRight: 12 }}
+                />
+                <View className="flex-1">
+                  <Text className="text-foreground font-medium">
+                    Request a Song
+                  </Text>
+                  <Text className="text-muted-foreground text-xs mt-0.5">
+                    Suggest songs and track your requests
+                  </Text>
+                </View>
               </View>
-            )}
+              <Ionicons name="chevron-forward" size={20} color="#666" />
+            </TouchableOpacity>
+          </Card>
+
+          {/* Downloads Section */}
+          <Card className="mb-4 p-4 bg-card border border-border">
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/downloads");
+              }}
+              className="flex-row items-center justify-between py-2"
+            >
+              <View className="flex-row items-center flex-1">
+                <Ionicons
+                  name="cloud-download-outline"
+                  size={20}
+                  color="#ff0000"
+                  style={{ marginRight: 12 }}
+                />
+                <View className="flex-1">
+                  <Text className="text-foreground font-medium">
+                    Downloads
+                  </Text>
+                  <Text className="text-muted-foreground text-xs mt-0.5">
+                    Songs available offline
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#666" />
+            </TouchableOpacity>
           </Card>
 
           {/* About Section */}
@@ -657,7 +680,7 @@ export default function Setting() {
               <Ionicons name="chevron-forward" size={20} color="#666" />
             </TouchableOpacity>
 
-            <View className="flex-row items-center justify-between py-3">
+            <View className="flex-row items-center justify-between py-3 border-b border-border">
               <View className="flex-row items-center flex-1">
                 <Ionicons
                   name="information-circle-outline"
@@ -667,8 +690,43 @@ export default function Setting() {
                 />
                 <Text className="text-foreground font-medium">Version</Text>
               </View>
-              <Text className="text-muted-foreground">1.0.1</Text>
+              <Text className="text-muted-foreground">{getVersionLabel()}</Text>
             </View>
+
+            <TouchableOpacity
+              onPress={() => void handleCheckForUpdates()}
+              disabled={isManualChecking}
+              className="flex-row items-center justify-between py-3"
+            >
+              <View className="flex-row items-center flex-1">
+                <Ionicons
+                  name="refresh-outline"
+                  size={20}
+                  color="#ff0000"
+                  style={{ marginRight: 12 }}
+                />
+                <View className="flex-1">
+                  <Text className="text-foreground font-medium">
+                    Check for updates
+                  </Text>
+                  {lastCheckedAt ? (
+                    <Text className="text-muted-foreground text-xs mt-0.5">
+                      Last checked{" "}
+                      {new Date(lastCheckedAt).toLocaleString()}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+              {isManualChecking ? (
+                <ActivityIndicator size="small" color={AppColors.primary} />
+              ) : (
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color="#666"
+                />
+              )}
+            </TouchableOpacity>
           </Card>
 
           {/* Sign Out Button */}
@@ -742,6 +800,29 @@ export default function Setting() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog>
+
+      {/* Manual APK update prompt (Android). OTA updates surface via the
+          global prompt; the "up to date" verdict is shown as a toast. */}
+      {apkUpdate.available ? (
+        <UpdateModal
+          visible={manualUpdateVisible}
+          kind="apk"
+          version={apkUpdate.version}
+          notes={apkUpdate.notes}
+          mandatory={apkUpdate.mandatory}
+          isDownloading={apkDownloadStatus === "downloading" || isOtaDownloading}
+          downloadStatus={apkDownloadStatus}
+          downloadProgress={apkDownloadProgress}
+          error={apkUpdateError}
+          onInstall={() => void downloadAndInstallApk()}
+          onLater={
+            apkUpdate.mandatory
+              ? undefined
+              : () => setManualUpdateVisible(false)
+          }
+          onDismissError={clearApkUpdateError}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

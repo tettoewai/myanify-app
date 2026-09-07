@@ -69,21 +69,27 @@ export function UpdateModal({
 
   const isActive = downloadStatus === "downloading" || isDownloading;
   const isComplete = downloadStatus === "complete";
+  // expo-updates OTA downloads expose no byte progress — show indeterminate state.
+  const isOtaActive = kind === "ota" && isActive;
 
   const primaryLabel = isComplete
     ? "Install update"
-    : isActive
-      ? `${downloadProgress?.percent ?? 0}%`
-      : kind === "apk"
-        ? "Download & install"
-        : "Update now";
+    : isOtaActive
+      ? "Updating…"
+      : isActive
+        ? `${downloadProgress?.percent ?? 0}%`
+        : kind === "apk"
+          ? "Download & install"
+          : "Update now";
 
   const handleRequestClose = () => {
     if (mandatory) return;
     onLater?.();
   };
 
-  const showProgress = isActive && downloadProgress && downloadProgress.totalBytes > 0;
+  const showProgress =
+    kind === "apk" && isActive && downloadProgress && downloadProgress.totalBytes > 0;
+  const showOtaSpinner = isOtaActive;
 
   return (
     <Modal
@@ -126,9 +132,11 @@ export function UpdateModal({
           <Text className="text-sm text-muted-foreground mb-4 px-2 leading-loose">
             {isComplete
               ? "The update has been downloaded. Tap below to install."
-              : isActive
-                ? "Downloading in the background. You can close this dialog and continue using the app."
-                : "A new version is available. Update to get the latest features and fixes."}
+              : isOtaActive
+                ? "Downloading the update. The app will restart when ready."
+                : isActive
+                  ? "Downloading in the background. You can close this dialog and continue using the app."
+                  : "A new version is available. Update to get the latest features and fixes."}
           </Text>
         )}
 
@@ -167,6 +175,15 @@ export function UpdateModal({
               </Text>
               <Text className="text-xs text-muted-foreground font-medium">
                 {downloadProgress!.percent}%
+              </Text>
+            </View>
+          </View>
+        ) : showOtaSpinner ? (
+          <View className="px-2 mb-3">
+            <View className="flex-row items-center gap-2 bg-muted/50 rounded-lg px-3 py-2">
+              <ActivityIndicator size="small" color={ACCENT} />
+              <Text className="text-xs text-muted-foreground">
+                Downloading update… The app will restart when ready.
               </Text>
             </View>
           </View>

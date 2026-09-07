@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 type AppExtra = {
   apiUrl?: string;
@@ -27,12 +28,24 @@ function requireConfig(
 
 /** API base including `/api` suffix. */
 export function getApiBaseUrl(): string {
-  return requireConfig("EXPO_PUBLIC_API_URL", "apiUrl").replace(/\/$/, "");
+  const baseUrl = requireConfig("EXPO_PUBLIC_API_URL", "apiUrl").replace(/\/$/, "");
+
+  if (Platform.OS === "android") {
+    return baseUrl.replace("http://localhost:", "http://10.0.2.2:");
+  }
+
+  return baseUrl;
 }
 
 /** Public site origin (no `/api` suffix). Used for audio stream proxy URLs. */
 export function getAppUrl(): string {
-  return requireConfig("EXPO_PUBLIC_APP_URL", "appUrl").replace(/\/$/, "");
+  const baseUrl = requireConfig("EXPO_PUBLIC_APP_URL", "appUrl").replace(/\/$/, "");
+
+  if (Platform.OS === "android") {
+    return baseUrl.replace("http://localhost:", "http://10.0.2.2:");
+  }
+
+  return baseUrl;
 }
 
 export function getCloudinaryCloudName(): string {
