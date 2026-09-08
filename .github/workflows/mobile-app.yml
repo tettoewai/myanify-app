@@ -1,0 +1,47 @@
+name: mobile-app
+
+on:
+  push:
+    paths:
+      - "app.json"
+      - "package.json"
+      - "hooks/useApkUpdate.ts"
+      - "lib/update-verify.ts"
+      - "app.config.ts"
+  pull_request:
+    paths:
+      - "app.json"
+      - "package.json"
+      - "hooks/useApkUpdate.ts"
+      - "lib/update-verify.ts"
+      - "app.config.ts"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: version lockstep (app.json vs package.json)
+        run: |
+          node -e "
+            const app = require('./app.json');
+            const pkg = require('./package.json');
+            if (app.expo.version !== pkg.version) {
+              console.error('version mismatch: app.json ' + app.expo.version + ' vs package.json ' + pkg.version);
+              process.exit(1);
+            }
+            if (!Number.isInteger(app.expo.android.versionCode) || app.expo.android.versionCode <= 0) {
+              console.error('bad android.versionCode');
+              process.exit(1);
+            }
+            console.log('version OK: ' + app.expo.version + ' (' + app.expo.android.versionCode + ')');
+          "
+      - run: npx tsc --noEmit

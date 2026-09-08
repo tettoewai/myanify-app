@@ -45,6 +45,17 @@ export async function setLicenseKey(licenseKey: string): Promise<void> {
   await SecureStore.setItemAsync(LICENSE_KEY, licenseKey);
 }
 
+// Drop a cached license that the server has rejected (key rotation,
+// re-login as a different user, revoked device). Without this the client
+// keeps retrying validate with the same dead key and never self-heals.
+export async function clearStaleLicense(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(LICENSE_KEY);
+  } catch {
+    // No license stored — fine.
+  }
+}
+
 // Register device and get license
 export async function registerDevice(deviceName?: string): Promise<{ deviceId: string; licenseKey: string }> {
   try {
@@ -61,8 +72,14 @@ export async function registerDevice(deviceName?: string): Promise<{ deviceId: s
       await setLicenseKey(response.licenseKey);
       return { deviceId, licenseKey: response.licenseKey };
     }
-    
-    throw new Error("Failed to register device");
+
+    // 2xx but unexpected shape — preserve server payload for diagnostics
+    // instead of masking it behind a generic message.
+    throw new Error(
+      response.message ||
+        response.error ||
+        "Failed to register device (unexpected server response)",
+    );
   } catch (error) {
     console.error("Device registration error:", error);
     throw error;
@@ -106,8 +123,13 @@ export async function ensureDeviceRegistered(
 
     if (await validateLicense()) return true;
 
-    // No (or invalid) license — register, then re-validate.
-    // registerDevice throws with server message (non-VIP, device limit, …).
+    // No (or invalid) license — drop the dead key first so a rotated /
+    // revoked / cross-user license can't poison the re-register + re-validate
+    // that follows. registerDevice throws with server message (non-VIP,
+    // device limit, …).
+    const staleKey = await getLicenseKey().catch(() => null);
+    if (staleKey) await clearStaleLicense();
+
     await registerDevice(deviceName);
     return await validateLicense();
   } catch (error) {
