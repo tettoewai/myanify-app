@@ -1,7 +1,6 @@
-import { LoadingSpinner, LoadingView } from "@/components/LoadingSpinner";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
-import { authStorage } from "@/lib/auth-storage";
 import { AppColors } from "@/lib/colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -10,8 +9,8 @@ import {
 } from "@react-native-google-signin/google-signin";
 import { useMutation } from "@tanstack/react-query";
 import Constants from "expo-constants";
+import { useRouter } from "expo-router";
 import { Button, Input, useToast } from "heroui-native";
-import { Redirect, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { withUniwind } from "uniwind";
@@ -21,23 +20,18 @@ const StyledIonicons = withUniwind(Ionicons);
 const IOS_CLIENT_ID = Constants.expoConfig?.extra?.google?.iosClientId;
 const WEB_CLIENT_ID = Constants.expoConfig?.extra?.google?.webClientId;
 
-export default function Login() {
-  const { signIn, token, isLoading: authLoading } = useAuth();
+export default function Register() {
+  const { signIn } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [isVisible, setIsVisible] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
-  const [verificationEmail, setVerificationEmail] = useState("");
-  const [isResending, setIsResending] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
 
   useEffect(() => {
-    if (!WEB_CLIENT_ID) {
-      console.warn(
-        "Google Sign-In: WEB_CLIENT_ID is not defined in expoConfig.extra.google",
-      );
-    }
     GoogleSignin.configure({
       webClientId: WEB_CLIENT_ID,
       iosClientId: IOS_CLIENT_ID,
@@ -45,62 +39,34 @@ export default function Login() {
     });
   }, []);
 
-  const loginMutation = useMutation({
+  const registerMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiClient.post("/mobile-login", {
+      const response = await apiClient.post("/auth/register", {
         email,
         password,
       });
-      if (!response.token) {
-        throw new Error("Invalid response from server");
-      }
-      return response.token;
+      return response as {
+        message?: string;
+        requiresVerification?: boolean;
+      };
     },
-    onSuccess: async (token) => {
+    onSuccess: (data) => {
       toast.show({
         variant: "success",
-        label: "Login Successful",
-        description: "Welcome back to Myanify!",
+        label: "Account created",
+        description:
+          data.message ||
+          "Please check your email to verify your account.",
         icon: <Ionicons name="checkmark-circle" size={24} color="white" />,
       });
-      await signIn(token);
+      setRegisteredEmail(email);
+      setNeedsVerification(true);
     },
     onError: (error: any) => {
-      let errorMessage = error.message || "Something went wrong";
-
-      if (
-        errorMessage.includes("Network request failed") ||
-        errorMessage.includes("Connection to") ||
-        errorMessage.includes("failed")
-      ) {
-        errorMessage =
-          "Unable to connect to Myanify. Check your internet connection and try again.";
-      }
-
-      if (errorMessage === "EMAIL_NOT_VERIFIED") {
-        setVerificationEmail(email);
-        setNeedsVerification(true);
-        toast.show({
-          variant: "danger",
-          label: "Email Not Verified",
-          description: "Please verify your email before signing in.",
-          icon: <Ionicons name="alert-circle" size={24} color="white" />,
-        });
-        return;
-      } else if (errorMessage === "Invalid credentials") {
-        errorMessage = "Incorrect email or password. Please try again.";
-      } else if (errorMessage === "Internal server error") {
-        errorMessage =
-          "Something went wrong on our end. Please try again shortly.";
-      }
-
-      const statusCode = error.response?.status;
       toast.show({
         variant: "danger",
-        label: "Login Failed",
-        description: statusCode
-          ? `Status ${statusCode}: ${errorMessage}`
-          : errorMessage,
+        label: "Registration Failed",
+        description: error.message || "Failed to create account. Try again.",
         icon: <Ionicons name="alert-circle" size={24} color="white" />,
       });
     },
@@ -119,7 +85,7 @@ export default function Login() {
     onSuccess: async (appSessionToken) => {
       toast.show({
         variant: "success",
-        label: "Google Login Successful",
+        label: "Account Created",
         description: "You've successfully signed in with Google.",
         icon: <Ionicons name="checkmark-circle" size={24} color="white" />,
       });
@@ -128,7 +94,7 @@ export default function Login() {
     onError: (error: any) => {
       toast.show({
         variant: "danger",
-        label: "Google Login Failed",
+        label: "Google Sign Up Failed",
         description: error.message || "Something went wrong with Google login",
         icon: <Ionicons name="alert-circle" size={24} color="white" />,
       });
@@ -147,54 +113,46 @@ export default function Login() {
         throw new Error("No ID token received from Google");
       }
     } catch (error: any) {
-      console.error("Google Login Error Details:", {
-        code: error.code,
-        message: error.message,
-        nativeStackAndroid: error.nativeStackAndroid,
-        webClientId: WEB_CLIENT_ID ? "✅ Set" : "❌ Missing",
-        troubleshooting:
-          "https://react-native-google-signin.github.io/docs/troubleshooting",
-      });
-
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        // user cancelled the login flow
-      } else if (error.code === statusCodes.IN_PROGRESS) {
-        // operation (e.g. sign in) is in progress already
-      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+      if (
+        error.code !== statusCodes.SIGN_IN_CANCELLED &&
+        error.code !== statusCodes.IN_PROGRESS
+      ) {
         toast.show({
           variant: "danger",
-          label: "Google Play Services",
-          description: "Google Play Services not available or outdated",
-        });
-      } else if (error.code === "10" || error.code === 10) {
-        toast.show({
-          variant: "danger",
-          label: "Google Sign-In Configuration Error",
-          description:
-            "SHA-1 fingerprint not registered. Add your app's SHA-1 to Google Cloud Console → OAuth Client ID → SHA certificate fingerprints.",
-        });
-      } else {
-        toast.show({
-          variant: "danger",
-          label: "Google Login Error",
+          label: "Google Sign Up Error",
           description: error.message || "An unknown error occurred",
         });
       }
     }
   };
 
+  const handleResendVerification = async () => {
+    try {
+      await apiClient.post("/auth/resend-verification", {
+        email: registeredEmail,
+      });
+      toast.show({
+        variant: "success",
+        label: "Email sent",
+        description: "Verification email resent. Valid for 24 hours.",
+        icon: <Ionicons name="checkmark-circle" size={24} color="white" />,
+      });
+    } catch (error: any) {
+      toast.show({
+        variant: "danger",
+        label: "Resend Failed",
+        description:
+          error.message || "Failed to resend verification email",
+        icon: <Ionicons name="alert-circle" size={24} color="white" />,
+      });
+    }
+  };
+
   const isInvalidEmail =
     email !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const doPasswordsMatch = confirmPassword === "" || password === confirmPassword;
 
-  if (authLoading) {
-    return <LoadingView />;
-  }
-
-  if (token) {
-    return <Redirect href="/(tabs)/home" />;
-  }
-
-  const handleLogin = async () => {
+  const handleRegister = () => {
     if (!email || !password || isInvalidEmail) {
       toast.show({
         variant: "warning",
@@ -206,35 +164,29 @@ export default function Login() {
       });
       return;
     }
-    // Clear any existing token before attempting login
-    await authStorage.removeToken();
-    loginMutation.mutate();
-  };
-
-  const handleResendVerification = async () => {
-    setIsResending(true);
-    try {
-      await apiClient.post("/auth/resend-verification", {
-        email: verificationEmail,
-      });
+    if (password.length < 6) {
       toast.show({
-        variant: "success",
-        label: "Email sent",
-        description: "Verification email resent. Valid for 24 hours.",
-        icon: <Ionicons name="checkmark-circle" size={24} color="white" />,
-      });
-      setNeedsVerification(false);
-    } catch (error: any) {
-      toast.show({
-        variant: "danger",
-        label: "Resend Failed",
-        description:
-          error.message || "Failed to resend verification email",
+        variant: "warning",
+        label: "Validation Error",
+        description: "Password must be at least 6 characters",
         icon: <Ionicons name="alert-circle" size={24} color="white" />,
+        actionLabel: "Close",
+        onActionPress: ({ hide }) => hide(),
       });
-    } finally {
-      setIsResending(false);
+      return;
     }
+    if (password !== confirmPassword) {
+      toast.show({
+        variant: "warning",
+        label: "Validation Error",
+        description: "Passwords do not match",
+        icon: <Ionicons name="alert-circle" size={24} color="white" />,
+        actionLabel: "Close",
+        onActionPress: ({ hide }) => hide(),
+      });
+      return;
+    }
+    registerMutation.mutate();
   };
 
   if (needsVerification) {
@@ -242,21 +194,29 @@ export default function Login() {
       <View className="flex-1 justify-center items-center bg-background px-5">
         <View className="w-full">
           <View className="w-full items-center">
-            <View className="w-16 h-16 rounded-full bg-yellow-100/10 items-center justify-center mb-4">
-              <Ionicons name="mail" size={28} color="#f59e0b" />
+            <View className="w-16 h-16 rounded-full bg-primary/10 items-center justify-center mb-4">
+              <Ionicons name="mail" size={28} color="#ff0000" />
             </View>
             <Text className="text-foreground text-xl font-bold">
               Verify Your Email
             </Text>
             <Text className="text-muted-foreground/80 text-sm mt-2 text-center leading-relaxed">
-              Please verify your email address before signing in.
-            </Text>
-            <Text className="text-muted-foreground/80 text-sm mt-2 text-center leading-relaxed">
-              We sent a verification link to{" "}
+              We&apos;ve sent a verification link to{" "}
               <Text className="text-foreground font-medium">
-                {verificationEmail}
+                {registeredEmail}
               </Text>
             </Text>
+            <View className="mt-4 bg-card/60 rounded-lg px-4 py-3 items-center">
+              <View className="flex-row items-center gap-2">
+                <Ionicons name="time-outline" size={14} color={AppColors.mutedForeground} />
+                <Text className="text-muted-foreground text-xs">
+                  Link expires in 24 hours
+                </Text>
+              </View>
+              <Text className="text-muted-foreground text-xs mt-1">
+                Tap the link in your email to activate your account.
+              </Text>
+            </View>
           </View>
           <View className="mt-6 gap-3">
             <Button
@@ -264,22 +224,15 @@ export default function Login() {
               className="w-full rounded-sm"
               variant="primary"
               onPress={handleResendVerification}
-              isDisabled={isResending}
             >
-              {isResending ? (
-                <LoadingSpinner size="sm" color="#ffffff" />
-              ) : (
-                <>
-                  <Ionicons name="mail-outline" size={16} color="white" className="mr-2" />
-                  <Button.Label>Resend verification email</Button.Label>
-                </>
-              )}
+              <Ionicons name="mail-outline" size={16} color="white" className="mr-2" />
+              <Button.Label>Resend verification email</Button.Label>
             </Button>
             <Button
               feedbackVariant="scale-ripple"
               className="w-full rounded-sm"
               variant="ghost"
-              onPress={() => setNeedsVerification(false)}
+              onPress={() => router.replace("/(auth)/login")}
             >
               <Button.Label className="text-muted-foreground">
                 Back to sign in
@@ -296,7 +249,7 @@ export default function Login() {
       <View className="w-full">
         <View className="w-full items-center">
           <Text className="font-bold text-primary text-2xl">Myanify</Text>
-          <Text className="text-muted-foreground/70">Login to continue</Text>
+          <Text className="text-muted-foreground/70">Create your account</Text>
         </View>
         <View className="mt-4">
           <Button
@@ -331,7 +284,6 @@ export default function Login() {
           </View>
         </View>
         <View className="gap-4 mt-2">
-          {/* Email TextField - Using props directly instead of compound components */}
           <View className="gap-1">
             <Text className="text-sm font-medium text-foreground ml-1">
               Email Address <Text className="text-danger">*</Text>
@@ -344,7 +296,7 @@ export default function Login() {
                 value={email}
                 onChangeText={setEmail}
                 className="flex-1 pl-10 pr-4 rounded-sm"
-                editable={!loginMutation.isPending}
+                editable={!registerMutation.isPending}
                 isInvalid={isInvalidEmail}
               />
               <StyledIonicons
@@ -361,7 +313,6 @@ export default function Login() {
             )}
           </View>
 
-          {/* Password TextField - Using props directly instead of compound components */}
           <View className="gap-1">
             <Text className="text-sm font-medium text-foreground ml-1">
               Password <Text className="text-danger">*</Text>
@@ -373,7 +324,7 @@ export default function Login() {
                 className="flex-1 pl-10 pr-12 rounded-sm"
                 value={password}
                 onChangeText={setPassword}
-                editable={!loginMutation.isPending}
+                editable={!registerMutation.isPending}
               />
               <StyledIonicons
                 name="lock-closed-outline"
@@ -393,39 +344,72 @@ export default function Login() {
                 />
               </Pressable>
             </View>
+            <Text className="text-xs text-muted-foreground ml-1">
+              Must be at least 6 characters
+            </Text>
+          </View>
+
+          <View className="gap-1">
+            <Text className="text-sm font-medium text-foreground ml-1">
+              Confirm Password <Text className="text-danger">*</Text>
+            </Text>
+            <View className="w-full flex-row items-center relative">
+              <Input
+                placeholder="Confirm your password"
+                secureTextEntry={!isVisible}
+                className="flex-1 pl-10 pr-12 rounded-sm"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                editable={!registerMutation.isPending}
+                isInvalid={!doPasswordsMatch}
+              />
+              <StyledIonicons
+                name="lock-closed-outline"
+                size={16}
+                className="absolute left-3.5 text-muted-foreground"
+                pointerEvents="none"
+              />
+              <Pressable
+                onPress={() => setIsVisible(!isVisible)}
+                hitSlop={10}
+                className="absolute right-4"
+              >
+                <StyledIonicons
+                  name={isVisible ? "eye-off-outline" : "eye-outline"}
+                  size={16}
+                  className="text-muted-foreground"
+                />
+              </Pressable>
+            </View>
+            {!doPasswordsMatch && (
+              <Text className="text-xs text-danger ml-1">
+                Passwords do not match
+              </Text>
+            )}
           </View>
 
           <Button
             feedbackVariant="scale-ripple"
             className="mt-4 rounded-sm w-full"
             variant="primary"
-            onPress={handleLogin}
-            isDisabled={loginMutation.isPending}
+            onPress={handleRegister}
+            isDisabled={registerMutation.isPending}
           >
-            {loginMutation.isPending ? (
+            {registerMutation.isPending ? (
               <LoadingSpinner size="sm" color="#ffffff" />
             ) : (
-              <Button.Label>Sign In</Button.Label>
+              <Button.Label>Create account</Button.Label>
             )}
           </Button>
         </View>
-        <View className="mt-6 items-center gap-1">
+        <View className="mt-6 items-center">
           <Text className="text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
+            Already have an account?{" "}
             <Text
               className="text-primary"
-              onPress={() => router.push("/(auth)/register")}
+              onPress={() => router.replace("/(auth)/login")}
             >
-              Sign up
-            </Text>
-          </Text>
-          <Text className="text-sm text-muted-foreground">
-            Forgot your password?{" "}
-            <Text
-              className="text-primary"
-              onPress={() => router.push("/(auth)/forgot-password")}
-            >
-              Reset Password
+              Sign in
             </Text>
           </Text>
         </View>

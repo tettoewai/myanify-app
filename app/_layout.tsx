@@ -174,6 +174,10 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/register" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/forgot-password" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/reset-password" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/verify-email" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="player"
@@ -202,6 +206,7 @@ export default function RootLayout() {
         <Stack.Screen name="genre/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="see-all/[section]" options={{ headerShown: false }} />
         <Stack.Screen name="liked-songs" options={{ headerShown: false }} />
+        <Stack.Screen name="change-password" options={{ headerShown: false }} />
         <Stack.Screen name="downloads" options={{ headerShown: false }} />
         <Stack.Screen name="request-song" options={{ headerShown: false }} />
         <Stack.Screen name="announcements" options={{ headerShown: false }} />

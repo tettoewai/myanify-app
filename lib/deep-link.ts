@@ -16,6 +16,8 @@ export interface DeepLinkTarget {
   href: Href;
   /** The raw slug / id captured from the URL, if any. */
   slug?: string;
+  /** Pre-auth flows (verify email / reset password) that don't require a session. */
+  publicAuth?: boolean;
 }
 
 /**
@@ -27,7 +29,27 @@ export interface DeepLinkTarget {
  */
 export function parseDeepLinkPath(pathname: string): DeepLinkTarget | null {
   const normalized = pathname.startsWith("/") ? pathname : `/${pathname}`;
-  const segments = normalized.split("/").filter(Boolean);
+  const [pathOnly, query] = normalized.split("?");
+  const segments = pathOnly.split("/").filter(Boolean);
+
+  // Pre-auth routes opened from emails — map straight to the matching screen.
+  if (segments.length === 1) {
+    const [route] = segments;
+    if (route === "verify-email" || route === "reset-password") {
+      const params = new URLSearchParams(query ?? "");
+      const token = params.get("token");
+      if (!token) return null;
+      return {
+        href: {
+          pathname: `/(auth)/${route}` as Href,
+          params: { token },
+        } as any,
+        slug: token,
+        publicAuth: true,
+      };
+    }
+    return null;
+  }
 
   if (segments.length < 2) {
     return null;

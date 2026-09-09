@@ -30,6 +30,13 @@ export function useDeepLink(isAuthenticated: boolean) {
       const target = parseDeepLinkPath(pathname);
       if (!target) return;
 
+      // Pre-auth flows (verify email / reset password) don't need a session —
+      // open them immediately so email links work on a fresh install.
+      if (target.publicAuth) {
+        router.push(target.href);
+        return;
+      }
+
       pendingRef.current = target;
       setPending(target);
 

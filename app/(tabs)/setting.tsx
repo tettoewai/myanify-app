@@ -488,31 +488,26 @@ export default function Setting() {
               </TouchableOpacity>
             )}
 
-            {profile.hasPassword && (
-              <TouchableOpacity
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  showDialog(
-                    "Change Password",
-                    "Please use the web app to change your password.",
-                  );
-                }}
-                className="flex-row items-center justify-between py-3 border-b border-border"
-              >
-                <View className="flex-row items-center flex-1">
-                  <Ionicons
-                    name="lock-closed-outline"
-                    size={20}
-                    color="#ff0000"
-                    style={{ marginRight: 12 }}
-                  />
-                  <Text className="text-foreground font-medium">
-                    Change Password
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#666" />
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/change-password");
+              }}
+              className="flex-row items-center justify-between py-3 border-b border-border"
+            >
+              <View className="flex-row items-center flex-1">
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color="#ff0000"
+                  style={{ marginRight: 12 }}
+                />
+                <Text className="text-foreground font-medium">
+                  {profile.hasPassword ? "Change Password" : "Set Password"}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#666" />
+            </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => {
