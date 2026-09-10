@@ -53,6 +53,7 @@
           ]
         }
       ],
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
@@ -103,7 +104,12 @@
       ],
       "expo-asset",
       "expo-updates",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png"
+        }
+      ],
       [
         "@react-native-google-signin/google-signin",
         {

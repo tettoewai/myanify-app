@@ -51,7 +51,7 @@ index 092af43b1c112008f324408f20b6737a184cbbce..c50c13ce7e0be72e6b29e0df7f25e7c6
  
  enum class InterruptionMode(val value: String) : Enumerable {
 diff --git a/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..9adbbefa2ebd71f0946c0796d51d0364e6977f67 100644
+index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..70b304b8f0eea4c972ed2ae90e79b1be74e40a26 100644
 --- a/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
 +++ b/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
 @@ -9,6 +9,7 @@ import android.content.Intent
@@ -62,12 +62,15 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..9adbbefa2ebd71f0946c0796d51d0364
  import android.os.Binder
  import android.os.Build
  import android.os.Bundle
-@@ -28,3 +29,4 @@ import expo.modules.audio.AudioLockScreenOptions
+@@ -27,6 +28,7 @@ import androidx.media3.session.SessionCommand
  import expo.modules.audio.AudioLockScreenOptions
  import expo.modules.audio.AudioPlayer
  import expo.modules.audio.Metadata
 +import expo.modules.audio.R
-@@ -62,12 +63,18 @@ class AudioControlsService : MediaSessionService() {
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.cancel
+@@ -62,12 +64,18 @@ class AudioControlsService : MediaSessionService() {
        }
  
        ACTION_SEEK_FORWARD -> withPlayerOnAppThread { player ->
@@ -88,7 +91,7 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..9adbbefa2ebd71f0946c0796d51d0364
      }
  
      // Ensure channel exists and update current notification
-@@ -91,13 +98,14 @@ class AudioControlsService : MediaSessionService() {
+@@ -91,13 +99,14 @@ class AudioControlsService : MediaSessionService() {
      val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
        if (notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
@@ -110,7 +113,7 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..9adbbefa2ebd71f0946c0796d51d0364
        }
      }
    }
-@@ -116,7 +124,8 @@ class AudioControlsService : MediaSessionService() {
+@@ -116,7 +125,8 @@ class AudioControlsService : MediaSessionService() {
      val session = mediaSession ?: return null
  
      val builder = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -120,7 +123,7 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..9adbbefa2ebd71f0946c0796d51d0364
        .setContentTitle(currentMetadata?.title ?: "\u200E")
        .setContentText(currentMetadata?.artist)
        .setSubText(currentMetadata?.albumTitle)
-@@ -136,6 +145,16 @@ class AudioControlsService : MediaSessionService() {
+@@ -136,6 +146,16 @@ class AudioControlsService : MediaSessionService() {
      val session = mediaSession ?: return
      val customLayout = mutableListOf<CommandButton>()
  
@@ -137,7 +140,7 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..9adbbefa2ebd71f0946c0796d51d0364
      // Add seek backward button if enabled
      if (currentOptions?.showSeekBackward == true) {
        customLayout.add(
-@@ -167,6 +186,26 @@ class AudioControlsService : MediaSessionService() {
+@@ -167,6 +187,26 @@ class AudioControlsService : MediaSessionService() {
        )
      }
  
@@ -164,7 +167,7 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..9adbbefa2ebd71f0946c0796d51d0364
      session.setCustomLayout(customLayout)
    }
  
-@@ -331,6 +370,18 @@ class AudioControlsService : MediaSessionService() {
+@@ -331,6 +371,18 @@ class AudioControlsService : MediaSessionService() {
      currentPlayer = null
    }
  
@@ -183,7 +186,7 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..9adbbefa2ebd71f0946c0796d51d0364
    companion object {
      private const val CHANNEL_ID = "expo_audio_channel"
      private const val ACTION_PLAY = "expo.modules.audio.action.PLAY"
-@@ -339,6 +390,9 @@ class AudioControlsService : MediaSessionService() {
+@@ -339,6 +391,9 @@ class AudioControlsService : MediaSessionService() {
  
      const val ACTION_SEEK_FORWARD = "expo.modules.audio.action.SEEK_FORWARD"
      const val ACTION_SEEK_BACKWARD = "expo.modules.audio.action.SEEK_REWIND"

@@ -105,6 +105,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Best-effort deactivate push tokens so the user stops getting
+    // notifications after sign-out.
+    try {
+      const { unregisterPushToken } = await import("@/hooks/usePushNotifications");
+      await unregisterPushToken();
+    } catch (error) {
+      console.error("Push token unregister on sign-out failed:", error);
+    }
     await clearSession();
     router.replace("/");
   };

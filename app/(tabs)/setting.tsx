@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
+import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import { checkForUpdateAsync } from "expo-updates";
 import { Button, Card, Dialog, useToast } from "heroui-native";
@@ -41,6 +42,13 @@ interface UserProfile {
   isPremium: boolean;
   createdAt: string;
   hasPassword: boolean;
+}
+
+interface NotificationPreferences {
+  newSongs: boolean;
+  newAlbums: boolean;
+  songRequestUpdates: boolean;
+  announcements: boolean;
 }
 
 const LAST_UPDATE_CHECK_KEY = "@myanify:last-manual-update-check";
@@ -131,6 +139,84 @@ export default function Setting() {
 
   const handleSaveProfile = () => {
     updateProfileMutation.mutate({ name });
+  };
+
+  // Notification preferences
+  const { data: notifPrefs, isLoading: notifPrefsLoading } =
+    useQuery<NotificationPreferences>({
+      queryKey: ["notification-preferences"],
+      queryFn: () => apiClient.get("/notifications/preferences"),
+      enabled: !!token,
+      staleTime: 5 * 60 * 1000,
+    });
+
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+
+  useEffect(() => {
+    if (notifPrefsLoading) return;
+    Notifications.getPermissionsAsync().then(({ status }) => {
+      setNotificationsEnabled(status === "granted");
+    });
+  }, [notifPrefsLoading]);
+
+  const updatePrefsMutation = useMutation({
+    mutationFn: (data: Partial<NotificationPreferences>) =>
+      apiClient.put("/notifications/preferences", data),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["notification-preferences"], data);
+    },
+    onError: (error: any) => {
+      toast.show({
+        label: error.message || "Failed to update preferences",
+        variant: "danger",
+      });
+    },
+  });
+
+  const handleToggleNotifications = async (enabled: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setNotificationsEnabled(enabled);
+
+    if (enabled) {
+      const { status: existing } = await Notifications.getPermissionsAsync();
+      if (existing !== "granted") {
+        const { status } = await Notifications.requestPermissionsAsync();
+        setNotificationsEnabled(status === "granted");
+        if (status !== "granted") return;
+      }
+      try {
+        const tokenData = await Notifications.getExpoPushTokenAsync();
+        await apiClient.post("/push-tokens", {
+          token: tokenData.data,
+          platform: Platform.OS.toUpperCase(),
+          deviceName: Platform.OS === "android" ? "Android" : "iOS",
+        });
+        toast.show({
+          label: "Notifications enabled",
+          variant: "success",
+        });
+      } catch (error: any) {
+        setNotificationsEnabled(false);
+        toast.show({
+          label: error.message || "Failed to enable notifications",
+          variant: "danger",
+        });
+      }
+    } else {
+      try {
+        await apiClient.delete("/push-tokens");
+        toast.show({
+          label: "Notifications disabled",
+        });
+      } catch {
+        // Best-effort unregister
+      }
+    }
+  };
+
+  const handlePrefToggle = (key: keyof NotificationPreferences, value: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    updatePrefsMutation.mutate({ [key]: value });
   };
 
   // Manual update check (APK on Android + OTA everywhere)
@@ -421,10 +507,8 @@ export default function Setting() {
                 </Text>
               </View>
               <Switch
-                value={true}
-                onValueChange={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }}
+                value={notificationsEnabled}
+                onValueChange={handleToggleNotifications}
                 trackColor={{
                   false: AppColors.border,
                   true: AppColors.primary,
@@ -432,6 +516,39 @@ export default function Setting() {
                 thumbColor={AppColors.foreground}
               />
             </View>
+
+            {notificationsEnabled && (
+              <View className="pt-1">
+                <NotifSubRow
+                  icon="musical-note-outline"
+                  label="New song releases"
+                  description="When artists you follow release new songs"
+                  value={notifPrefs?.newSongs ?? true}
+                  onValueChange={(v) => handlePrefToggle("newSongs", v)}
+                />
+                <NotifSubRow
+                  icon="albums-outline"
+                  label="New albums"
+                  description="When new albums are added"
+                  value={notifPrefs?.newAlbums ?? true}
+                  onValueChange={(v) => handlePrefToggle("newAlbums", v)}
+                />
+                <NotifSubRow
+                  icon="checkmark-done-outline"
+                  label="Song requests"
+                  description="When your song request is reviewed"
+                  value={notifPrefs?.songRequestUpdates ?? true}
+                  onValueChange={(v) => handlePrefToggle("songRequestUpdates", v)}
+                />
+                <NotifSubRow
+                  icon="megaphone-outline"
+                  label="Announcements"
+                  description="App news and updates"
+                  value={notifPrefs?.announcements ?? true}
+                  onValueChange={(v) => handlePrefToggle("announcements", v)}
+                />
+              </View>
+            )}
 
             <View className="flex-row items-center justify-between py-3">
               <View className="flex-row items-center flex-1">
@@ -843,6 +960,48 @@ function SettingRow({
         <Text className="text-foreground font-medium">{label}</Text>
       </View>
       <Text className="text-muted-foreground">{value}</Text>
+    </View>
+  );
+}
+
+function NotifSubRow({
+  icon,
+  label,
+  description,
+  value,
+  onValueChange,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  description: string;
+  value: boolean;
+  onValueChange: (v: boolean) => void;
+}) {
+  return (
+    <View className="flex-row items-center justify-between py-2.5 border-b border-border/50">
+      <View className="flex-row items-center flex-1 pr-3">
+        <Ionicons
+          name={icon}
+          size={18}
+          color={AppColors.mutedForeground}
+          style={{ marginRight: 12 }}
+        />
+        <View className="flex-1">
+          <Text className="text-foreground text-sm font-medium">{label}</Text>
+          <Text className="text-muted-foreground text-xs mt-0.5">
+            {description}
+          </Text>
+        </View>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        trackColor={{
+          false: AppColors.border,
+          true: AppColors.primary,
+        }}
+        thumbColor={AppColors.foreground}
+      />
     </View>
   );
 }

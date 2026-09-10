@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AuthProvider } from "@/context/AuthContext";
 import { PlayerProvider } from "@/context/PlayerContext";
+import { PushNotificationRegistrar } from "@/components/PushNotificationRegistrar";
 import * as SplashScreen from "expo-splash-screen";
 
 // Keep the splash screen visible while we fetch resources
@@ -71,6 +72,7 @@ export default function Provider({ children }: { children: ReactNode }) {
         <QueryClientProvider client={queryClient}>
           <HeroUINativeProvider config={config}>
             <AuthProvider>
+              <PushNotificationRegistrar />
               <PlayerProvider>
                 <View className="flex-1 bg-background" onLayout={onLayoutRootView}>
                   {children}

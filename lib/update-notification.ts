@@ -2,6 +2,7 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
 export const UPDATE_CHANNEL_ID = "myanify-update";
+export const CONTENT_CHANNEL_ID = "myanify-content";
 const NOTIFICATION_ID = "myanify-apk-update";
 const AVAILABLE_NOTIFICATION_ID = "myanify-update-available";
 
@@ -22,6 +23,14 @@ export async function ensureNotificationChannel() {
     vibrationPattern: [],
     enableLights: false,
     enableVibrate: false,
+  });
+
+  await Notifications.setNotificationChannelAsync(CONTENT_CHANNEL_ID, {
+    name: "Content Updates",
+    importance: Notifications.AndroidImportance.DEFAULT,
+    sound: "default",
+    vibrationPattern: [0, 250],
+    enableLights: true,
   });
 }
 

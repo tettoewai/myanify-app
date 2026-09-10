@@ -65,7 +65,7 @@
     "tailwind-variants": "^3.2.2",
     "tailwindcss": "^4.1.18",
     "tweetnacl": "^1.0.3",
-    "uniwind": "^1.2.2"
+    "uniwind": "1.10.0"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
@@ -81,5 +81,10 @@
       ]
     }
   },
-  "private": true
+  "private": true,
+  "pnpm": {
+    "patchedDependencies": {
+      "expo-audio@1.1.1": "patches/expo-audio@1.1.1.patch"
+    }
+  }
 }

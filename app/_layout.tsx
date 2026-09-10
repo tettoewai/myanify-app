@@ -1,6 +1,6 @@
 import Provider from "@/components/Providers";
 import { MiniPlayer } from "@/components/player/MiniPlayer";
-import { Stack, useSegments } from "expo-router";
+import { Stack, useSegments, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useUpdateCheck } from "@/hooks/useUpdateCheck";
 import { useApkUpdate } from "@/hooks/useApkUpdate";
@@ -10,13 +10,16 @@ import { useAuth } from "@/context/AuthContext";
 import { useEffect, useState } from "react";
 import * as Notifications from "expo-notifications";
 import { registerBackgroundUpdateCheck } from "@/lib/background-update-check";
-import { setupUpdateNotifications } from "@/lib/update-notification";
+import { setupUpdateNotifications, ensureNotificationChannel } from "@/lib/update-notification";
 import "../global.css";
 import "@/lib/theme";
 
 setupUpdateNotifications();
+void ensureNotificationChannel();
 
 export default function RootLayout() {
+  const router = useRouter();
+
   useEffect(() => {
     void registerBackgroundUpdateCheck();
   }, []);
@@ -111,7 +114,8 @@ export default function RootLayout() {
     }
   }, [isDownloadComplete]);
 
-  // Handle notification tap — trigger install if download is complete, or show update modal if available
+  // Handle notification tap — trigger install if download is complete, show update modal if available,
+  // or navigate to content for push notifications
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as Record<string, string>;
@@ -125,10 +129,26 @@ export default function RootLayout() {
         } else if (data?.status === "available") {
           setUpdateModalVisible(true);
         }
+        return;
+      }
+
+      switch (data?.type) {
+        case "new_song":
+          if (data.songId) router.push(`/song/${data.songId}`);
+          break;
+        case "new_album":
+          if (data.albumId) router.push(`/album/${data.albumId}`);
+          break;
+        case "announcement":
+          router.push("/announcements");
+          break;
+        case "song_request":
+          router.push("/request-song");
+          break;
       }
     });
     return () => subscription.remove();
-  }, [downloadStatus, downloadAndInstall]);
+  }, [downloadStatus, downloadAndInstall, router]);
 
   const handleInstall = () => {
     if (apkAvailable) {
