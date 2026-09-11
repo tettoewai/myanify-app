@@ -57,6 +57,7 @@ interface PlayerContextType {
   history: QueueItem[];
   volume: number;
   isMuted: boolean;
+  playbackRate: number;
   isShuffled: boolean;
   repeatMode: "off" | "all" | "one";
   radioMode: boolean;
@@ -72,6 +73,7 @@ interface PlayerContextType {
   setQueue: (songs: Song[]) => void;
   setVolume: (volume: number) => void;
   setIsMuted: (muted: boolean) => void;
+  setPlaybackRate: (rate: number) => void;
   setIsShuffled: (shuffled: boolean) => void;
   setRepeatMode: (mode: "off" | "all" | "one") => void;
   setRadioMode: (enabled: boolean) => void;
@@ -104,6 +106,7 @@ const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 
 const LAST_PLAYED_SONG_KEY = "myanify_last_played_song";
 const LAST_PLAYBACK_POSITION_KEY = "myanify_last_playback_position";
+const VOLUME_STORAGE_KEY = "myanify_volume";
 const POSITION_SAVE_INTERVAL = 5000;
 const PRELOAD_SECONDS_BEFORE_END = 15;
 
@@ -126,6 +129,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [history, setHistory] = useState<QueueItem[]>([]);
   const [volume, setVolume] = useState(1.0);
   const [isMuted, setIsMuted] = useState(false);
+  const [playbackRate, setPlaybackRateState] = useState(1.0);
   const [isShuffled, setIsShuffled] = useState(false);
   const [repeatMode, setRepeatMode] = useState<"off" | "all" | "one">("off");
   const [radioMode, setRadioMode] = useState(false);
@@ -593,14 +597,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       .catch((err) => {
         if (!cancelled) {
           console.error("Failed to resolve audio URI:", err);
-          setError("Failed to load audio");
+          // Mirror web 429 handling: surface rate-limit instead of generic skip.
+          const message =
+            err instanceof Error ? err.message : "Failed to load audio";
+          const isRateLimited =
+            message.includes("429") ||
+            message.toLowerCase().includes("rate limit") ||
+            message.toLowerCase().includes("too many");
+          setError(isRateLimited ? "Rate limited — retrying…" : message);
           setIsPlaying(false);
           shouldAutoPlayRef.current = false;
           toast.show({
-            label: "Couldn't play track. Skipping…",
+            label: isRateLimited
+              ? "Too many requests — skipping…"
+              : "Couldn't play track. Skipping…",
             variant: "danger",
           });
-          setTimeout(() => advanceToNextRef.current(), 300);
+          setTimeout(() => advanceToNextRef.current(), isRateLimited ? 1500 : 300);
         }
       })
       .finally(() => {
@@ -633,6 +646,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         }
 
         player.volume = isMuted ? 0 : volume;
+        try {
+          player.playbackRate = playbackRate;
+        } catch {
+          // Older native builds may not support rate changes.
+        }
         player.loop = repeatMode === "one";
 
         // Auto-play if needed
@@ -649,11 +667,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       } else {
         // Player was already ready - just ensure volume is correct
         player.volume = isMuted ? 0 : volume;
+        try {
+          player.playbackRate = playbackRate;
+        } catch {
+          // Older native builds may not support rate changes.
+        }
       }
     } else if (!hasValidSourceRef.current) {
       playerReadyRef.current = false;
     }
-  }, [status.isLoaded, status.duration, player, volume, isMuted, repeatMode]);
+  }, [status.isLoaded, status.duration, player, volume, isMuted, repeatMode, playbackRate]);
 
   useEffect(() => {
     if (currentSong && getSongStreamUrl(currentSong)) {
@@ -839,6 +862,39 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [repeatMode, player]);
 
+  // ── Volume persistence (mirrors web localStorage) ──
+  useEffect(() => {
+    SecureStore.getItemAsync(VOLUME_STORAGE_KEY)
+      .then((raw) => {
+        if (raw == null) return;
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed)) {
+          setVolume(Math.max(0, Math.min(1, parsed)));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    SecureStore.setItemAsync(VOLUME_STORAGE_KEY, String(volume)).catch(
+      () => {},
+    );
+  }, [volume]);
+
+  // ── Playback rate (mirrors web 0.5–2x) ──
+  const setPlaybackRate = useCallback(
+    (rate: number) => {
+      const clamped = Math.max(0.5, Math.min(rate, 2));
+      setPlaybackRateState(clamped);
+      try {
+        player.playbackRate = clamped;
+      } catch (err) {
+        console.error("Failed to set playback rate:", err);
+      }
+    },
+    [player],
+  );
+
   useEffect(() => {
     if (status.duration > 0 && !isSeekingRef.current) {
       setDuration(status.duration);
@@ -921,10 +977,33 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const playSongInternal = useCallback(
     async (song: Song, options?: PlaySongOptions) => {
       if (!song) return;
+      // Auth gate (mirrors web requireLoginRedirect) — internal advances skip it.
+      if (!options?.skipAuth && !token) {
+        toast.show({ label: "Please log in to play music", variant: "danger" });
+        return;
+      }
       if (!getSongStreamUrl(song)) {
         setError("No audio source available");
         toast.show({ label: "No audio source available", variant: "danger" });
         return;
+      }
+      // Premium gate (mirrors web /premium redirect).
+      if (song.isPremium && !options?.skipAuth) {
+        try {
+          const { getSubscriptionStatus } = await import(
+            "@/lib/download-settings"
+          );
+          const sub = await getSubscriptionStatus();
+          if (!sub.isVIP) {
+            toast.show({
+              label: "This song requires VIP",
+              variant: "danger",
+            });
+            return;
+          }
+        } catch {
+          // If entitlement check fails, fall through to streaming attempt.
+        }
       }
 
       if (currentSong?.id !== song.id) {
@@ -957,20 +1036,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
       if (shouldRadio) {
         enableSmartRadio(song, true);
-      } else if (
-        options?.source === "playlist" &&
-        !userDisabledRadioRef.current
-      ) {
-        setRadioMode(true);
-        setRadioSeedSongId(song.id);
-        markSongSeen(song.id);
+      } else if (options?.source === "playlist") {
+        // Explicit playlist/album context kills radio (mirrors web player).
+        userDisabledRadioRef.current = true;
+        setRadioMode(false);
       }
 
       void saveLastPlayedSong(song);
       // NOTE: play history is saved on track advance (advanceToNext) with
       // actual listen time, not here at play start (would always be 0).
     },
-    [currentSong?.id, markSongSeen, applyUpNext, enableSmartRadio, toast],
+    [currentSong?.id, markSongSeen, applyUpNext, enableSmartRadio, toast, token],
   );
 
   const playSong = useCallback(
@@ -1455,6 +1531,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         history,
         volume,
         isMuted,
+        playbackRate,
         isShuffled,
         repeatMode,
         radioMode,
@@ -1470,6 +1547,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         setQueue: setQueueLegacy,
         setVolume,
         setIsMuted,
+        setPlaybackRate,
         setIsShuffled: handleSetIsShuffled,
         setRepeatMode,
         setRadioMode: handleSetRadioMode,
