@@ -37,6 +37,14 @@ yarn-error.*
 # local env files
 .env
 .env*.local
+# Firebase / Expo credentials (never commit real keys; see credentials.json.example)
+credentials.json
+google-services.json
+GoogleService-Info.plist
+
+# local builds
+*.apk
+*.aab
 
 # typescript
 *.tsbuildinfo

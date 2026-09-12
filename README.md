@@ -1,50 +1,109 @@
-# Welcome to your Expo app 👋
+# Myanify App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo (React Native) mobile app for Myanify — a music streaming platform for Myanmar music. Stream songs with synchronized lyrics, browse artists/albums, manage playlists, download for offline, and receive push notifications.
 
-## Get started
+Pairs with the web backend/API: [tettoewai/myanify](https://github.com/tettoewai/myanify).
 
-1. Install dependencies
+## Features
 
-   ```bash
-   npm install
-   ```
+- **Playback** — Streaming player with queue, sleep timer, playback-rate, volume persistence
+- **Offline downloads** — Device-licensed offline songs with self-update via GitHub Releases
+- **Library** — Playlists, liked songs, listening history
+- **Auth** — Email/password + Google sign-in, gated player for logged-out users
+- **Push notifications** — FCM per-artist targeting with preferences
+- **Deep links** — Public song/album/playlist links (`myanify://...`)
+- **Spotify import** — PKCE login to import Spotify content (`myanify://auth/spotify`)
 
-2. Start the app
+## Tech Stack
 
-   ```bash
-   npx expo start
-   ```
+- [Expo](https://expo.dev/) ~54 / React Native 0.81 / React 19
+- [expo-router](https://docs.expo.dev/router/introduction/) (file-based routing)
+- [expo-audio](https://docs.expo.dev/versions/latest/sdk/audio/) (patched, see `patches/`)
+- TanStack Query, AsyncStorage + SecureStore, Reanimated, Gorhom Bottom Sheet
+- Tailwind CSS 4 via Uniwind
 
-In the output, you'll find options to open the app in a
+## Prerequisites
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- Node.js 18+
+- [pnpm](https://pnpm.io/)
+- Android Studio (Android emulator) and/or Xcode (iOS simulator)
+- Running web backend (`EXPO_PUBLIC_API_URL`, default `http://localhost:3000/api`)
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Getting Started
 
-## Get a fresh project
-
-When you're ready, run:
+### 1. Install dependencies
 
 ```bash
-npm run reset-project
+pnpm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Configure environment variables
 
-## Learn more
+```bash
+cp .env.example .env
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `EXPO_PUBLIC_API_URL` | Yes | Backend API base, e.g. `http://localhost:3000/api` |
+| `EXPO_PUBLIC_APP_URL` | Yes | Public site origin for stream proxy URLs |
+| `EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME` | Yes | Cloudinary cloud name for artwork |
+| `EXPO_PUBLIC_SPOTIFY_CLIENT_ID` | No | Must match web `SPOTIFY_CLIENT_ID`; register `myanify://auth/spotify` redirect |
+| `EXPO_PUBLIC_RELEASE_PUBLIC_KEY` | No | Ed25519 public key (`pnpm gen:release-keys` on web) |
+| `EXPO_PUBLIC_RELEASE_REPO` | No | Self-update repo (default `tettoewai/myanify-releases`) |
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+> Android emulator maps `http://localhost:` → `http://10.0.2.2:` automatically (see `lib/env.ts`).
 
-## Join the community
+### 3. Firebase (push notifications)
 
-Join our community of developers creating universal apps.
+1. Create a Firebase project and Android app.
+2. Download `google-services.json` into the project root (gitignored — never commit).
+3. Add SHA fingerprints as needed for Google Sign-In.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### 4. Start the dev server
+
+```bash
+pnpm start
+# or
+npx expo start
+```
+
+Open in a development build, Android emulator, iOS simulator, or Expo Go (limited sandbox).
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `pnpm start` | Start Expo dev server |
+| `pnpm android` / `pnpm ios` | Run on Android / iOS |
+| `pnpm lint` | Run ESLint |
+| `pnpm build:android-apk` | EAS internal APK (`production-apk` profile) |
+| `pnpm build:android-aab` | EAS production AAB |
+
+## Release signing
+
+Release builds use local credentials (never commit real keys):
+
+```bash
+cp credentials.json.example credentials.json
+# place keystore at android/app/release.keystore (gitignored)
+```
+
+See `RELEASE.md` and `eas.json` for profiles (`development`, `preview`, `production`, `production-apk`).
+
+## Project Structure
+
+```
+app/
+  (auth)/       # login, register
+  (tabs)/       # home, search, library, settings
+  album/ artist/ genre/ song/ playlist/  # detail routes
+  player.tsx downloads.tsx liked-songs.tsx ...
+components/player/  # player UI (MoreOptionsSheet, etc.)
+hooks/          # useLockScreenPlayer, etc.
+lib/            # API client, env, spotify-auth, storage
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
