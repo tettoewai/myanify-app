@@ -48,6 +48,20 @@ export function parseDeepLinkPath(pathname: string): DeepLinkTarget | null {
         publicAuth: true,
       };
     }
+    // Media notification tap — index into the full-screen Now Playing for the
+    // song the notification belongs to (/player renders the active queue item,
+    // so no per-song id is needed; the tap never goes stale on track change).
+    if (
+      route === "player" ||
+      route === "liked-songs" ||
+      route === "downloads" ||
+      route === "announcements"
+    ) {
+      return {
+        href: { pathname: `/${route}` as Href } as any,
+        slug: route,
+      };
+    }
     return null;
   }
 

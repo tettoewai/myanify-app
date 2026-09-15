@@ -1,4 +1,5 @@
 import { LoadingView } from "@/components/LoadingSpinner";
+import { DisclaimerNotice } from "@/components/DisclaimerNotice";
 import { SignInPrompt } from "@/components/auth/SignInPrompt";
 import {
   StyledSafeAreaView as SafeAreaView,
@@ -859,6 +860,9 @@ export default function Setting() {
               </Text>
             </View>
           </TouchableOpacity>
+
+          {/* Non-commercial disclaimer */}
+          <DisclaimerNotice />
         </View>
       </ScrollView>
 

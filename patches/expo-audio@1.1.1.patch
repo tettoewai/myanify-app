@@ -1,5 +1,21 @@
+diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/src/main/java/expo/modules/audio/AudioModule.kt
+index 49a53af9352907c05e9f3dc823c0334739a1bf63..a31ef5faf0fca870cec9957a8a35650fbb57f067 100644
+--- a/android/src/main/java/expo/modules/audio/AudioModule.kt
++++ b/android/src/main/java/expo/modules/audio/AudioModule.kt
+@@ -428,9 +428,9 @@ class AudioModule : Module() {
+         }
+       }
+ 
+-      Function("updateLockScreenMetadata") { ref: AudioPlayer, metadata: Metadata ->
++      Function("updateLockScreenMetadata") { ref: AudioPlayer, metadata: Metadata, options: AudioLockScreenOptions? ->
+         runOnMain {
+-          ref.updateLockScreenMetadata(metadata)
++          ref.updateLockScreenMetadata(metadata, options)
+         }
+       }
+ 
 diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/src/main/java/expo/modules/audio/AudioPlayer.kt
-index 320062e6217ddf28d290d3456fb037ea4a947a1d..1f168d89b10a23ebdbc22eaf1b278f09ef416b3b 100644
+index 320062e6217ddf28d290d3456fb037ea4a947a1d..2e989c572ba4032085ce20f99d947f47884ce431 100644
 --- a/android/src/main/java/expo/modules/audio/AudioPlayer.kt
 +++ b/android/src/main/java/expo/modules/audio/AudioPlayer.kt
 @@ -32,6 +32,9 @@ import java.util.UUID
@@ -12,6 +28,19 @@ index 320062e6217ddf28d290d3456fb037ea4a947a1d..1f168d89b10a23ebdbc22eaf1b278f09
  private const val SEEK_JUMP_INTERVAL_MS: Long = 10_000
  
  @UnstableApi
+@@ -109,10 +112,10 @@ class AudioPlayer(
+     }
+   }
+ 
+-  fun updateLockScreenMetadata(metadata: Metadata) {
++  fun updateLockScreenMetadata(metadata: Metadata, options: AudioLockScreenOptions? = null) {
+     if (isActiveForLockScreen) {
+       this.metadata = metadata
+-      AudioControlsService.updateMetadata(this, metadata)
++      AudioControlsService.updateMetadata(this, metadata, options)
+     }
+   }
+ 
 @@ -122,6 +125,18 @@ class AudioPlayer(
      }
    }
@@ -32,10 +61,10 @@ index 320062e6217ddf28d290d3456fb037ea4a947a1d..1f168d89b10a23ebdbc22eaf1b278f09
      updateJob?.cancel()
      updateJob = flow {
 diff --git a/android/src/main/java/expo/modules/audio/AudioRecords.kt b/android/src/main/java/expo/modules/audio/AudioRecords.kt
-index 092af43b1c112008f324408f20b6737a184cbbce..c50c13ce7e0be72e6b29e0df7f25e7c6980545f2 100644
+index 092af43b1c112008f324408f20b6737a184cbbce..8393d285a8585cc8e8de0f2b89287f9f0f3ba0d8 100644
 --- a/android/src/main/java/expo/modules/audio/AudioRecords.kt
 +++ b/android/src/main/java/expo/modules/audio/AudioRecords.kt
-@@ -93,8 +93,12 @@ enum class LockScreenButtons(val value: Int) : Enumerable {
+@@ -93,8 +93,13 @@ enum class LockScreenButtons(val value: Int) : Enumerable {
  }
  
  class AudioLockScreenOptions(
@@ -46,23 +75,27 @@ index 092af43b1c112008f324408f20b6737a184cbbce..c50c13ce7e0be72e6b29e0df7f25e7c6
 +  @Field val showNextTrack: Boolean = false,
 +  @Field val showPreviousTrack: Boolean = false,
 +  @Field val seekIntervalMs: Long = 10000,
-+  @Field val showLikeAction: Boolean = false
++  @Field val showLikeAction: Boolean = false,
++  @Field val isLiked: Boolean = false
  ) : Record
  
  enum class InterruptionMode(val value: String) : Enumerable {
 diff --git a/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..70b304b8f0eea4c972ed2ae90e79b1be74e40a26 100644
+index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..18d2226273cc18121b2a5b4aa22157b6d98cefe7 100644
 --- a/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
 +++ b/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-@@ -9,6 +9,7 @@ import android.content.Intent
+@@ -7,8 +7,10 @@ import android.app.PendingIntent
+ import android.content.Context
+ import android.content.Intent
  import android.content.pm.ServiceInfo
++import android.net.Uri
  import android.graphics.Bitmap
  import android.graphics.BitmapFactory
 +import android.graphics.Color
  import android.os.Binder
  import android.os.Build
  import android.os.Bundle
-@@ -27,6 +28,7 @@ import androidx.media3.session.SessionCommand
+@@ -27,6 +29,7 @@ import androidx.media3.session.SessionCommand
  import expo.modules.audio.AudioLockScreenOptions
  import expo.modules.audio.AudioPlayer
  import expo.modules.audio.Metadata
@@ -70,7 +103,26 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..70b304b8f0eea4c972ed2ae90e79b1be
  import kotlinx.coroutines.CoroutineScope
  import kotlinx.coroutines.Dispatchers
  import kotlinx.coroutines.cancel
-@@ -62,12 +64,18 @@ class AudioControlsService : MediaSessionService() {
+@@ -40,6 +43,18 @@ class AudioControlsService : MediaSessionService() {
+   private var currentMetadata: Metadata? = null
+   private var currentPlayer: AudioPlayer? = null
+   private var currentOptions: AudioLockScreenOptions? = null
++  /** Last custom layout, mirrored as explicit notification actions in buildNotification(). */
++  @Volatile
++  private var currentNotificationButtons: List<CommandButton> = emptyList()
++  /**
++   * Last known play state, mirrored from Player.Listener.onIsPlayingChanged.
++   * ExoPlayer forbids reads off the application thread (it throws
++   * IllegalStateException), but buildNotification() runs on arbitrary threads
++   * (service start, IO artwork callbacks) — so never read player.isPlaying
++   * there; use this cache instead.
++   */
++  @Volatile
++  private var lastKnownIsPlaying = false
+   private val scope = CoroutineScope(Dispatchers.IO)
+   private var currentArtworkUrl: URL? = null
+   private var currentArtwork: Bitmap? = null
+@@ -62,12 +77,18 @@ class AudioControlsService : MediaSessionService() {
        }
  
        ACTION_SEEK_FORWARD -> withPlayerOnAppThread { player ->
@@ -91,10 +143,11 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..70b304b8f0eea4c972ed2ae90e79b1be
      }
  
      // Ensure channel exists and update current notification
-@@ -91,13 +99,14 @@ class AudioControlsService : MediaSessionService() {
+@@ -90,24 +111,65 @@ class AudioControlsService : MediaSessionService() {
+   private fun createNotificationChannelIfNeeded() {
      val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-       if (notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
+-      if (notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
 -        notificationManager.createNotificationChannel(
 -          NotificationChannel(
 -            CHANNEL_ID,
@@ -102,29 +155,145 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..70b304b8f0eea4c972ed2ae90e79b1be
 -            NotificationManager.IMPORTANCE_LOW
 -          )
 -        )
-+        val channel = NotificationChannel(
-+          CHANNEL_ID,
-+          "Music Playback",
-+          NotificationManager.IMPORTANCE_LOW
-+        ).apply {
-+          description = "Media playback controls for Myanify"
-+        }
-+        notificationManager.createNotificationChannel(channel)
++      // Re-creating is idempotent on Android 8+: the OS keeps the user's
++      // importance choice but applies our current name/description, so
++      // upgrades never leave a stale channel behind on any OS version.
++      val channel = NotificationChannel(
++        CHANNEL_ID,
++        "Music Playback",
++        NotificationManager.IMPORTANCE_LOW
++      ).apply {
++        description = "Media playback controls for Myanify"
++        // Lockscreen shows artwork/controls on every version; stays silent.
++        lockscreenVisibility = Notification.VISIBILITY_PUBLIC
++        enableLights(false)
++        enableVibration(false)
++        setSound(null, null)
        }
++      notificationManager.createNotificationChannel(channel)
      }
    }
-@@ -116,7 +125,8 @@ class AudioControlsService : MediaSessionService() {
+ 
+   private fun buildContentIntent(): PendingIntent? {
+-    val appIntent = packageManager.getLaunchIntentForPackage(packageName) ?: return null
++    // Tapping the notification indexes into the in-app full player (/player
++    // route) belonging to the song the notification is showing. expo-router
++    // resolves myanify:// URLs on both cold start (getInitialURL) and warm
++    // (onNewIntent; MainActivity is singleTask so a live task is brought
++    // forward), and /player renders the active queue item from PlayerContext —
++    // so no per-song extras are needed and the target can never go stale.
++    val deepLink = Intent(Intent.ACTION_VIEW, Uri.parse("myanify://player")).apply {
++      `package` = packageName
++      // Bring the existing task forward instead of stacking a new one on top
++      // (works across Android 7-15; singleTask would already do this, but the
++      // explicit flags make cold+warm tap behave the same on every OEM).
++      addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
++    }
++    val resolved = try {
++      deepLink.resolveActivity(packageManager) != null
++    } catch (e: Exception) {
++      false
++    }
++    val launch = if (resolved) {
++      deepLink
++    } else {
++      // Scheme filter missing (e.g. custom manifest merge): fall back to a
++      // plain app launch rather than a dead tap.
++      packageManager.getLaunchIntentForPackage(packageName) ?: return null
++    }
+     return PendingIntent.getActivity(
+       this,
+-      0,
+-      appIntent,
++      CONTENT_INTENT_REQUEST_CODE,
++      launch,
++      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
++    )
++  }
++
++  private fun buildActionIntent(action: String, requestCode: Int): PendingIntent {
++    val intent = Intent(this, AudioControlsService::class.java).setAction(action)
++    return PendingIntent.getService(
++      this,
++      requestCode,
++      intent,
+       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+     )
+   }
+@@ -116,26 +178,83 @@ class AudioControlsService : MediaSessionService() {
      val session = mediaSession ?: return null
  
      val builder = NotificationCompat.Builder(this, CHANNEL_ID)
 -      .setSmallIcon(androidx.media3.session.R.drawable.media3_icon_circular_play)
+-      .setContentTitle(currentMetadata?.title ?: "\u200E")
 +      .setSmallIcon(R.drawable.notification_icon)
 +      .setColor(Color.parseColor("#FF0000"))
-       .setContentTitle(currentMetadata?.title ?: "\u200E")
++      .setContentTitle(currentMetadata?.title ?: "‎")
        .setContentText(currentMetadata?.artist)
        .setSubText(currentMetadata?.albumTitle)
-@@ -136,6 +146,16 @@ class AudioControlsService : MediaSessionService() {
+       .setLargeIcon(currentArtwork)
+       .setContentIntent(buildContentIntent())
+       .setAutoCancel(false)
++      // Foreground notification while playing (non-dismissible on every
++      // version); dismissible while paused. Uses the cached flag — reading
++      // player.isPlaying here would crash off the application thread.
++      .setOngoing(lastKnownIsPlaying)
++      // Every metadata/state refresh re-posts: never re-alert, no timestamp.
++      .setOnlyAlertOnce(true)
++      .setShowWhen(false)
++      // Required so the lockscreen shows artwork + controls instead of
++      // "contents hidden" on Android 5-10 and later.
++      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+       .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+ 
+-    // Using only session custom layout: do NOT call setShowActionsInCompactView.
+-    // The compact layout will follow the order of the custom layout provided to the session.
+-    builder.setStyle(MediaStyleNotificationHelper.MediaStyle(session))
++    // Mirror the session custom layout as explicit notification actions. The
++    // MediaStyle below only attaches the session token — without addAction()
++    // the notification (and the lockscreen on Android 12 and below) renders
++    // no transport buttons at all. Each intent loops back into
++    // onStartCommand, which already handles every ACTION_* on the player
++    // thread. (Android 13+ SystemUI renders from the session custom layout
++    // instead; these actions are ignored there, so both paths stay correct.)
++    val compactIndices = mutableListOf<Int>()
++    currentNotificationButtons.forEachIndexed { index, button ->
++      val sessionCommand = button.sessionCommand
++      val intentAction = when {
++        button.playerCommand == Player.COMMAND_PLAY_PAUSE -> ACTION_TOGGLE
++        sessionCommand != null -> sessionCommand.customAction.takeIf { it.isNotEmpty() }
++        else -> null
++      } ?: return@forEachIndexed
++      builder.addAction(
++        NotificationCompat.Action(
++          button.iconResId,
++          button.displayName,
++          buildActionIntent(intentAction, ACTION_REQUEST_CODE_BASE + index)
++        )
++      )
++      // Compact view fits 3 actions: prefer prev / play-pause / next, kept in
++      // layout order so the most important controls stay visible everywhere.
++      if (compactIndices.size < 3 &&
++        (button.playerCommand == Player.COMMAND_PLAY_PAUSE ||
++          sessionCommand?.customAction == ACTION_PREVIOUS ||
++          sessionCommand?.customAction == ACTION_NEXT)
++      ) {
++        compactIndices.add(index)
++      }
++    }
++
++    val mediaStyle = MediaStyleNotificationHelper.MediaStyle(session)
++    if (compactIndices.isNotEmpty()) {
++      mediaStyle.setShowActionsInCompactView(*compactIndices.toIntArray())
++    }
++    builder.setStyle(mediaStyle)
+ 
+     return builder.build()
+   }
+ 
+   private fun updateSessionCustomLayout(isPlaying: Boolean) {
      val session = mediaSession ?: return
++    lastKnownIsPlaying = isPlaying
      val customLayout = mutableListOf<CommandButton>()
  
 +    if (currentOptions?.showPreviousTrack == true) {
@@ -140,7 +309,7 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..70b304b8f0eea4c972ed2ae90e79b1be
      // Add seek backward button if enabled
      if (currentOptions?.showSeekBackward == true) {
        customLayout.add(
-@@ -167,6 +187,26 @@ class AudioControlsService : MediaSessionService() {
+@@ -167,7 +286,33 @@ class AudioControlsService : MediaSessionService() {
        )
      }
  
@@ -155,9 +324,12 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..70b304b8f0eea4c972ed2ae90e79b1be
 +    }
 +
 +    if (currentOptions?.showLikeAction == true) {
++      val isLiked = currentOptions?.isLiked == true
 +      customLayout.add(
-+        CommandButton.Builder(CommandButton.ICON_HEART_UNFILLED)
-+          .setDisplayName("Like")
++        CommandButton.Builder(
++          if (isLiked) CommandButton.ICON_HEART_FILLED else CommandButton.ICON_HEART_UNFILLED
++        )
++          .setDisplayName(if (isLiked) "Unlike" else "Like")
 +          .setEnabled(true)
 +          .setSessionCommand(SessionCommand(ACTION_LIKE, Bundle.EMPTY))
 +          .build()
@@ -165,9 +337,186 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..70b304b8f0eea4c972ed2ae90e79b1be
 +    }
 +
      session.setCustomLayout(customLayout)
++    // Keep a copy so buildNotification() can mirror the same buttons as
++    // explicit actions (required on Android 12 and below).
++    currentNotificationButtons = customLayout.toList()
    }
  
-@@ -331,6 +371,18 @@ class AudioControlsService : MediaSessionService() {
+   private fun postOrStartForegroundNotification(startInForeground: Boolean) {
+@@ -175,14 +320,22 @@ class AudioControlsService : MediaSessionService() {
+     val notification = buildNotification() ?: return
+ 
+     if (startInForeground) {
+-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+-        startForeground(
+-          notificationId,
+-          notification,
+-          ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+-        )
+-      } else {
+-        startForeground(notificationId, notification)
++      try {
++        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
++          startForeground(
++            notificationId,
++            notification,
++            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
++          )
++        } else {
++          startForeground(notificationId, notification)
++        }
++      } catch (e: Exception) {
++        // Android 12+ throws ForegroundServiceStartNotAllowedException when the
++        // app is backgrounded (e.g. autoplay advancing with screen off).
++        // Fall back to a plain notification so playback continues; the OS
++        // promotes the service when the app returns to the foreground.
++        notificationManager.notify(notificationId, notification)
+       }
+     } else {
+       notificationManager.notify(notificationId, notification)
+@@ -211,11 +364,20 @@ class AudioControlsService : MediaSessionService() {
+     currentMetadata = metadata
+     currentOptions = options
+ 
+-    metadata?.artworkUrl?.let {
+-      loadArtworkFromUrl(it) { bitmap ->
++    val newArtworkUrl = metadata?.artworkUrl
++    if (newArtworkUrl != null && newArtworkUrl == currentArtworkUrl && currentArtwork != null) {
++      // Same cover as before (e.g. re-activating the session): keep the
++      // cached bitmap so the notification never flashes imageless.
++    } else if (newArtworkUrl != null) {
++      // Post text metadata immediately (clearing any stale art from the
++      // previous track), then refresh once the new artwork arrives.
++      clearArtwork()
++      loadArtworkFromUrl(newArtworkUrl) { bitmap ->
+         currentArtwork = bitmap
+         postOrStartForegroundNotification(startInForeground = false)
+       }
++    } else {
++      clearArtwork()
+     }
+     player?.isActiveForLockScreen = true
+ 
+@@ -229,8 +391,11 @@ class AudioControlsService : MediaSessionService() {
+       addSession(session)
+       mediaSession = session
+ 
+-      // Set initial custom layout
+-      updateSessionCustomLayout(player.ref.isPlaying)
++      // Set initial custom layout. Must run on the application thread:
++      // ExoPlayer throws IllegalStateException on off-thread reads.
++      withPlayerOnAppThread { appPlayer ->
++        updateSessionCustomLayout(appPlayer.isPlaying)
++      }
+ 
+       postOrStartForegroundNotification(startInForeground = true)
+ 
+@@ -254,17 +419,39 @@ class AudioControlsService : MediaSessionService() {
+     }
+   }
+ 
+-  private fun updateMetadataInternal(player: AudioPlayer, metadata: Metadata?) {
++  private fun updateMetadataInternal(
++    player: AudioPlayer,
++    metadata: Metadata?,
++    options: AudioLockScreenOptions? = null
++  ) {
++    // Options carry live state (e.g. isLiked) that must refresh the buttons
++    // even when the track metadata itself is unchanged. No session rebuild —
++    // just swap the custom layout and re-post.
++    if (options != null && options != currentOptions) {
++      currentOptions = options
++      updateSessionCustomLayout(lastKnownIsPlaying)
++      postOrStartForegroundNotification(startInForeground = false)
++    }
+     if (player != currentPlayer || metadata == currentMetadata) {
+       return
+     }
+     currentMetadata = metadata
+-    currentMetadata?.artworkUrl?.let {
+-      loadArtworkFromUrl(it) { bitmap ->
+-        currentArtwork = bitmap
++    val newUrl = metadata?.artworkUrl
++    if (newUrl != null) {
++      if (newUrl != currentArtworkUrl || currentArtwork == null) {
++        // New track art: clear stale bitmap and post text first so a slow
++        // host never leaves the previous track's cover on screen.
++        clearArtwork()
+         postOrStartForegroundNotification(startInForeground = false)
++        loadArtworkFromUrl(newUrl) { bitmap ->
++          currentArtwork = bitmap
++          postOrStartForegroundNotification(startInForeground = false)
++        }
+       }
+-    } ?: postOrStartForegroundNotification(startInForeground = false)
++    } else {
++      clearArtwork()
++      postOrStartForegroundNotification(startInForeground = false)
++    }
+   }
+ 
+   private fun clearSessionInternal() {
+@@ -275,6 +462,8 @@ class AudioControlsService : MediaSessionService() {
+     playbackListener = null
+     currentPlayer = null
+     currentMetadata = null
++    currentNotificationButtons = emptyList()
++    clearArtwork()
+     mediaSession?.release()
+     mediaSession = null
+     stopForeground(STOP_FOREGROUND_REMOVE)
+@@ -298,17 +487,40 @@ class AudioControlsService : MediaSessionService() {
+     return super.onBind(intent) ?: binder
+   }
+ 
++  private var artworkGeneration = 0
++
++  private fun clearArtwork() {
++    artworkGeneration++
++    currentArtworkUrl = null
++    currentArtwork = null
++  }
++
+   private fun loadArtworkFromUrl(url: URL, callback: (Bitmap?) -> Unit) {
+-    if (url != currentArtworkUrl) {
+-      currentArtworkUrl = url
+-      scope.launch {
+-        try {
+-          val inputStream = url.openConnection().getInputStream()
+-          val bitmap = BitmapFactory.decodeStream(inputStream)
+-          callback(bitmap)
+-        } catch (e: Exception) {
+-          callback(null)
+-        }
++    if (url == currentArtworkUrl) return
++    // Generation guard: a slow load for track A finishing after track B
++    // started must not paint the wrong cover on any OS version.
++    val generation = ++artworkGeneration
++    currentArtworkUrl = url
++    scope.launch {
++      try {
++        // Timeouts keep slow artwork hosts from hanging the service on
++        // newer Android versions with stricter foreground-service limits.
++        val connection = url.openConnection()
++        connection.connectTimeout = 10_000
++        connection.readTimeout = 10_000
++        val bytes = connection.getInputStream().use { it.readBytes() }
++        // Downsample to <= 512px: notification large-icons are small, and
++        // full-res CDN/proxy images can OOM low-RAM devices (Android 7-11).
++        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
++        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
++        var sampleSize = 1
++        val maxDim = maxOf(bounds.outWidth, bounds.outHeight)
++        while (maxDim / (sampleSize * 2) >= 512 && sampleSize < 8) sampleSize *= 2
++        val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
++        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
++        if (generation == artworkGeneration) callback(bitmap)
++      } catch (e: Exception) {
++        if (generation == artworkGeneration) callback(null)
+       }
+     }
+   }
+@@ -331,6 +543,18 @@ class AudioControlsService : MediaSessionService() {
      currentPlayer = null
    }
  
@@ -186,7 +535,7 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..70b304b8f0eea4c972ed2ae90e79b1be
    companion object {
      private const val CHANNEL_ID = "expo_audio_channel"
      private const val ACTION_PLAY = "expo.modules.audio.action.PLAY"
-@@ -339,6 +391,9 @@ class AudioControlsService : MediaSessionService() {
+@@ -339,6 +563,9 @@ class AudioControlsService : MediaSessionService() {
  
      const val ACTION_SEEK_FORWARD = "expo.modules.audio.action.SEEK_FORWARD"
      const val ACTION_SEEK_BACKWARD = "expo.modules.audio.action.SEEK_REWIND"
@@ -196,8 +545,71 @@ index 04486e21da2f96bbfcfa00528fb2ac3d147acef3..70b304b8f0eea4c972ed2ae90e79b1be
  
      const val SEEK_INTERVAL_MS = 10000L
  
+@@ -346,11 +573,26 @@ class AudioControlsService : MediaSessionService() {
+     private var pendingMetadata: Metadata? = null
+     private var pendingOptions: AudioLockScreenOptions? = null
+ 
++    /** Base for per-button notification action PendingIntent request codes. */
++    private const val ACTION_REQUEST_CODE_BASE = 100
++    /** Request code for the notification tap (content) intent. */
++    private const val CONTENT_INTENT_REQUEST_CODE = 50
++
+     @Volatile
+     private var instance: AudioControlsService? = null
+ 
+     fun getInstance(): AudioControlsService? = instance
+ 
++    /**
++     * Seek interval honoring the JS lock-screen options. The MediaSession
++     * callback path (system UI on Android 13+) must use this instead of the
++     * hardcoded default so `seekIntervalMs` works on every OS version.
++     */
++    @JvmStatic
++    fun currentSeekIntervalMs(): Long {
++      return getInstance()?.currentOptions?.seekIntervalMs ?: SEEK_INTERVAL_MS
++    }
++
+     fun setActivePlayer(
+       context: Context,
+       player: AudioPlayer?,
+@@ -362,10 +604,16 @@ class AudioControlsService : MediaSessionService() {
+         service.setActivePlayerInternal(player, metadata, options)
+       } else {
+         val intent = Intent(context, AudioControlsService::class.java)
+-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+-          context.startForegroundService(intent)
+-        } else {
+-          context.startService(intent)
++        try {
++          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
++            context.startForegroundService(intent)
++          } else {
++            context.startService(intent)
++          }
++        } catch (e: Exception) {
++          // Android 12+ forbids background service starts while the app is
++          // backgrounded. Keep the request pending: it attaches on the next
++          // foreground update. Playback itself is unaffected.
+         }
+ 
+         pendingPlayer = player
+@@ -374,8 +622,12 @@ class AudioControlsService : MediaSessionService() {
+       }
+     }
+ 
+-    fun updateMetadata(player: AudioPlayer, metadata: Metadata?) {
+-      getInstance()?.updateMetadataInternal(player, metadata)
++    fun updateMetadata(
++      player: AudioPlayer,
++      metadata: Metadata?,
++      options: AudioLockScreenOptions? = null
++    ) {
++      getInstance()?.updateMetadataInternal(player, metadata, options)
+     }
+ 
+     fun clearSession() {
 diff --git a/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt b/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
-index 839aaef12d7699ea1a89037b31849775daa079f4..b99b68e01c9b01ecbd32feea5d0fa0a9f0009f39 100644
+index 839aaef12d7699ea1a89037b31849775daa079f4..61298298d96d341587211724401b1583036262f3 100644
 --- a/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
 +++ b/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
 @@ -35,6 +35,9 @@ class AudioMediaSessionCallback : MediaSession.Callback {
@@ -210,10 +622,17 @@ index 839aaef12d7699ea1a89037b31849775daa079f4..b99b68e01c9b01ecbd32feea5d0fa0a9
              .build()
          )
          .build()
-@@ -56,6 +59,15 @@ class AudioMediaSessionCallback : MediaSession.Callback {
-       AudioControlsService.ACTION_SEEK_BACKWARD -> {
-         session.player.seekTo(session.player.currentPosition - AudioControlsService.SEEK_INTERVAL_MS)
+@@ -51,10 +54,19 @@ class AudioMediaSessionCallback : MediaSession.Callback {
+   ): ListenableFuture<SessionResult> {
+     when (command.customAction) {
+       AudioControlsService.ACTION_SEEK_FORWARD -> {
+-        session.player.seekTo(session.player.currentPosition + AudioControlsService.SEEK_INTERVAL_MS)
++        session.player.seekTo(session.player.currentPosition + AudioControlsService.currentSeekIntervalMs())
        }
+       AudioControlsService.ACTION_SEEK_BACKWARD -> {
+-        session.player.seekTo(session.player.currentPosition - AudioControlsService.SEEK_INTERVAL_MS)
++        session.player.seekTo(session.player.currentPosition - AudioControlsService.currentSeekIntervalMs())
++      }
 +      AudioControlsService.ACTION_NEXT -> {
 +        AudioControlsService.getInstance()?.emitLockScreenNext()
 +      }
@@ -222,10 +641,9 @@ index 839aaef12d7699ea1a89037b31849775daa079f4..b99b68e01c9b01ecbd32feea5d0fa0a9
 +      }
 +      AudioControlsService.ACTION_LIKE -> {
 +        AudioControlsService.getInstance()?.emitLockScreenLike()
-+      }
+       }
      }
      return super.onCustomCommand(session, controller, command, args)
-   }
 diff --git a/android/src/main/res/drawable/notification_icon.xml b/android/src/main/res/drawable/notification_icon.xml
 new file mode 100644
 index 0000000000000000000000000000000000000000..89d2d7a5b9df437e32af63b1559f04a0d8a61bb3
@@ -243,10 +661,10 @@ index 0000000000000000000000000000000000000000..89d2d7a5b9df437e32af63b1559f04a0
 +        android:pathData="M12,3v10.55c-0.59,-0.34 -1.27,-0.55 -2,-0.55c-2.21,0 -4,1.79 -4,4s1.79,4 4,4 4,-1.79 4,-4V7h4V3H12z"/>
 +</vector>
 diff --git a/build/AudioConstants.d.ts b/build/AudioConstants.d.ts
-index a290f9aed8224d89cca6361c102d26b24feaa2ce..0554535fb3aac49987f8e527bc10b32fc153ad77 100644
+index a290f9aed8224d89cca6361c102d26b24feaa2ce..3f7eac3d8edf6c75668535561d6fd2dd1402004f 100644
 --- a/build/AudioConstants.d.ts
 +++ b/build/AudioConstants.d.ts
-@@ -10,5 +10,21 @@ export type AudioLockScreenOptions = {
+@@ -10,5 +10,27 @@ export type AudioLockScreenOptions = {
       * Whether the seek backward button should be displayed on the lock screen.
       */
      showSeekBackward?: boolean;
@@ -266,9 +684,50 @@ index a290f9aed8224d89cca6361c102d26b24feaa2ce..0554535fb3aac49987f8e527bc10b32f
 +     * Whether the like/heart button should be displayed on the lock screen.
 +     */
 +    showLikeAction?: boolean;
++    /**
++     * Whether the current track is liked. Controls the filled vs outline state
++     * of the like/heart button (and its accessibility label).
++     * Update via `updateLockScreenMetadata` to refresh without rebuilding the session.
++     */
++    isLiked?: boolean;
  };
  //# sourceMappingURL=AudioConstants.d.ts.map
 \ No newline at end of file
+diff --git a/build/AudioModule.types.d.ts b/build/AudioModule.types.d.ts
+index b30a75a61acbaf2af7c56e3c39a834c64400dd65..5f2715a3cc679829ca8cde8fd07223dd5d39edb9 100644
+--- a/build/AudioModule.types.d.ts
++++ b/build/AudioModule.types.d.ts
+@@ -163,8 +163,10 @@ export declare class AudioPlayer extends SharedObject<AudioEvents> {
+      * Updates the metadata displayed on the lock screen for this player.
+      * This method only has an effect if this player is currently active for lock screen controls.
+      * @param metadata The metadata to display (title, artist, album, artwork).
++     * @param options Optional configuration to configure the lock screen controls
++     * (e.g. refresh the liked state without rebuilding the session).
+      */
+-    updateLockScreenMetadata(metadata: AudioMetadata): void;
++    updateLockScreenMetadata(metadata: AudioMetadata, options?: AudioLockScreenOptions): void;
+     /**
+      * Removes this player from lock screen controls if it's currently active.
+      * This will clear the lock screen's now playing info.
+diff --git a/ios/AudioModule.swift b/ios/AudioModule.swift
+index 938f9859e01e8dcda55582324c4d58ac9f9d1c8c..e39706b9042f41466edbfb1221ce3be70ede39ef 100644
+--- a/ios/AudioModule.swift
++++ b/ios/AudioModule.swift
+@@ -217,10 +217,13 @@ public class AudioModule: Module {
+         player.setActiveForLockScreen(active, metadata: metadata, options: options)
+       }
+ 
+-      Function("updateLockScreenMetadata") { (player: AudioPlayer, metadata: Metadata?) in
++      Function("updateLockScreenMetadata") { (player: AudioPlayer, metadata: Metadata?, options: LockScreenOptions?) in
+         if player.isActiveForLockScreen {
+           player.metadata = metadata
+           MediaController.shared.updateNowPlayingInfo(for: player)
++          if let options {
++            MediaController.shared.updateLikeState(options.isLiked)
++          }
+         }
+       }
+ 
 diff --git a/ios/AudioPlayer.swift b/ios/AudioPlayer.swift
 index 1dbce0997fc2746a4c60a91e34101c0e83e7bd0d..f988a684734031cd5c9c2c71cd13d8b83eeae9f6 100644
 --- a/ios/AudioPlayer.swift
@@ -301,10 +760,10 @@ index 1dbce0997fc2746a4c60a91e34101c0e83e7bd0d..f988a684734031cd5c9c2c71cd13d8b8
 +  }
  }
 diff --git a/ios/AudioRecords.swift b/ios/AudioRecords.swift
-index f1759cd75b8b369156352e0f7431ee3d302dd131..3c9777fadf41b629eec605b4c0f714668a36b19e 100644
+index f1759cd75b8b369156352e0f7431ee3d302dd131..c7f52a03648404682c1f44f838223eed83c84c82 100644
 --- a/ios/AudioRecords.swift
 +++ b/ios/AudioRecords.swift
-@@ -56,6 +56,10 @@ struct Metadata: Record {
+@@ -56,6 +56,11 @@ struct Metadata: Record {
  struct LockScreenOptions: Record {
    @Field var showSeekForward: Bool = false
    @Field var showSeekBackward: Bool = false
@@ -312,11 +771,12 @@ index f1759cd75b8b369156352e0f7431ee3d302dd131..3c9777fadf41b629eec605b4c0f71466
 +  @Field var showPreviousTrack: Bool = false
 +  @Field var showLikeAction: Bool = false
 +  @Field var seekIntervalMs: Double = 10000
++  @Field var isLiked: Bool = false
  }
  
  enum BitRateStrategy: String, Enumerable {
 diff --git a/ios/MediaController.swift b/ios/MediaController.swift
-index 2dd3fb2e5f2fe7446d064a6fbfacecef381cd94d..8099e7a8b5720235856d321fc79137c66fc558e6 100644
+index 2dd3fb2e5f2fe7446d064a6fbfacecef381cd94d..e0560b4562187f079f10d052d28dbd515f13c48b 100644
 --- a/ios/MediaController.swift
 +++ b/ios/MediaController.swift
 @@ -173,7 +173,7 @@ class MediaController {
@@ -359,17 +819,24 @@ index 2dd3fb2e5f2fe7446d064a6fbfacecef381cd94d..8099e7a8b5720235856d321fc79137c6
      
      remoteCommandCenter.playCommand.isEnabled = true
      remoteCommandCenter.pauseCommand.isEnabled = true
-@@ -207,6 +222,9 @@ class MediaController {
+@@ -207,6 +222,16 @@ class MediaController {
      remoteCommandCenter.changePlaybackPositionCommand.isEnabled = true
      remoteCommandCenter.skipForwardCommand.isEnabled = options?.showSeekForward ?? false
      remoteCommandCenter.skipBackwardCommand.isEnabled = options?.showSeekBackward ?? false
 +    remoteCommandCenter.nextTrackCommand.isEnabled = options?.showNextTrack ?? false
 +    remoteCommandCenter.previousTrackCommand.isEnabled = options?.showPreviousTrack ?? false
 +    remoteCommandCenter.likeCommand.isEnabled = options?.showLikeAction ?? false
++    remoteCommandCenter.likeCommand.isActive = options?.isLiked ?? false
++  }
++
++  /// Refresh the liked (heart-fill) state without touching anything else.
++  /// Called when JS pushes new lock-screen options for the same track.
++  func updateLikeState(_ isLiked: Bool) {
++    remoteCommandCenter.likeCommand.isActive = isLiked
    }
  
    private func disableRemoteCommands() {
-@@ -216,6 +234,9 @@ class MediaController {
+@@ -216,6 +241,9 @@ class MediaController {
      remoteCommandCenter.changePlaybackPositionCommand.isEnabled = false
      remoteCommandCenter.skipForwardCommand.isEnabled = false
      remoteCommandCenter.skipBackwardCommand.isEnabled = false
@@ -379,7 +846,7 @@ index 2dd3fb2e5f2fe7446d064a6fbfacecef381cd94d..8099e7a8b5720235856d321fc79137c6
      
      // Remove event targets
      remoteCommandCenter.playCommand.removeTarget(self);
-@@ -224,5 +245,12 @@ class MediaController {
+@@ -224,5 +252,12 @@ class MediaController {
      remoteCommandCenter.changePlaybackPositionCommand.removeTarget(self);
      remoteCommandCenter.skipForwardCommand.removeTarget(self);
      remoteCommandCenter.skipBackwardCommand.removeTarget(self);
@@ -393,10 +860,10 @@ index 2dd3fb2e5f2fe7446d064a6fbfacecef381cd94d..8099e7a8b5720235856d321fc79137c6
    }
  }
 diff --git a/src/AudioConstants.ts b/src/AudioConstants.ts
-index 72a157c4efd88465ff6d5d203181d50acfb055ff..09ded9f25e3e12f57c8fc378495964beefce47d4 100644
+index 72a157c4efd88465ff6d5d203181d50acfb055ff..febdd165800c39b263b1d4462f9d2297b32a2719 100644
 --- a/src/AudioConstants.ts
 +++ b/src/AudioConstants.ts
-@@ -11,4 +11,20 @@ export type AudioLockScreenOptions = {
+@@ -11,4 +11,26 @@ export type AudioLockScreenOptions = {
     * Whether the seek backward button should be displayed on the lock screen.
     */
    showSeekBackward?: boolean;
@@ -416,4 +883,45 @@ index 72a157c4efd88465ff6d5d203181d50acfb055ff..09ded9f25e3e12f57c8fc378495964be
 +   * Whether the like/heart button should be displayed on the lock screen.
 +   */
 +  showLikeAction?: boolean;
++  /**
++   * Whether the current track is liked. Controls the filled vs outline state
++   * of the like/heart button (and its accessibility label).
++   * Update via `updateLockScreenMetadata` to refresh without rebuilding the session.
++   */
++  isLiked?: boolean;
  };
+diff --git a/src/AudioModule.types.ts b/src/AudioModule.types.ts
+index 376f63874c0885e5523a959cbf9bdfcb584685c1..e5281e05fb25bf95b240db92789af90379d52001 100644
+--- a/src/AudioModule.types.ts
++++ b/src/AudioModule.types.ts
+@@ -208,8 +208,13 @@ export declare class AudioPlayer extends SharedObject<AudioEvents> {
+    * Updates the metadata displayed on the lock screen for this player.
+    * This method only has an effect if this player is currently active for lock screen controls.
+    * @param metadata The metadata to display (title, artist, album, artwork).
++   * @param options Optional configuration to configure the lock screen controls
++   * (e.g. refresh the liked state without rebuilding the session).
+    */
+-  updateLockScreenMetadata(metadata: AudioMetadata): void;
++  updateLockScreenMetadata(
++    metadata: AudioMetadata,
++    options?: AudioLockScreenOptions
++  ): void;
+ 
+   /**
+    * Removes this player from lock screen controls if it's currently active.
+diff --git a/src/AudioModule.web.ts b/src/AudioModule.web.ts
+index b18c25cb1ebc643e2c141a7292bd9c9fa5148014..2c7a9b042556f5313e1fbf15827d53f3a85bc25a 100644
+--- a/src/AudioModule.web.ts
++++ b/src/AudioModule.web.ts
+@@ -236,7 +236,10 @@ export class AudioPlayerWeb
+   }
+ 
+   setActiveForLockScreen(active: boolean, metadata: Record<string, any>): void {}
+-  updateLockScreenMetadata(metadata: Record<string, any>): void {}
++  updateLockScreenMetadata(
++    metadata: Record<string, any>,
++    options?: Record<string, any>,
++  ): void {}
+   clearLockScreenControls(): void {}
+ 
+   _createMediaElement(): HTMLAudioElement {

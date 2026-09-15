@@ -22,6 +22,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const apiUrl = requireEnv("EXPO_PUBLIC_API_URL").replace(/\/$/, "");
   const appUrl = requireEnv("EXPO_PUBLIC_APP_URL").replace(/\/$/, "");
   const cloudinaryCloudName = requireEnv("EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME");
+  const spotifyClientId = optionalEnv("EXPO_PUBLIC_SPOTIFY_CLIENT_ID");
   const vercelBypassToken = optionalEnv("EXPO_PUBLIC_VERCEL_BYPASS_TOKEN");
   const releasePublicKey = optionalEnv("EXPO_PUBLIC_RELEASE_PUBLIC_KEY");
   const releaseRepo =
@@ -34,6 +35,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       apiUrl,
       appUrl,
       cloudinaryCloudName,
+      ...(spotifyClientId ? { spotifyClientId } : {}),
       ...(vercelBypassToken ? { vercelBypassToken } : {}),
       ...(releasePublicKey ? { releasePublicKey } : {}),
       releaseRepo,

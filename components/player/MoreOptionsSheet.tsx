@@ -94,8 +94,10 @@ export function MoreOptionsSheet({ visible, onClose }: MoreOptionsSheetProps) {
         await remove();
         setRemoving(false);
       })();
+      onClose();
     } else if (!downloadDisabled) {
       void download();
+      onClose();
     }
   };
 
@@ -147,6 +149,7 @@ export function MoreOptionsSheet({ visible, onClose }: MoreOptionsSheetProps) {
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   setSleepTimer(minutes);
+                  onClose();
                 }}
                 className={`px-3.5 py-2 rounded-full border ${
                   active ? "bg-primary border-primary" : "border-border"
@@ -166,6 +169,7 @@ export function MoreOptionsSheet({ visible, onClose }: MoreOptionsSheetProps) {
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setSleepTimer(null);
+              onClose();
             }}
             className={`px-3.5 py-2 rounded-full border ${
               !sleepActive ? "bg-primary border-primary" : "border-border"

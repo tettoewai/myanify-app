@@ -29,6 +29,10 @@ export interface Song {
   /** Proxied stream URL (`/api/audio/stream`) with byte-range support. */
   playbackUrl?: string;
   genre?: string;
+  language?: string | null;
+  mood?: string | null;
+  tags?: string[];
+  _reason?: string | null;
   lyrics?: LyricLine[];
   isPremium?: boolean;
 }

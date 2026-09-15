@@ -113,7 +113,7 @@ const PRELOAD_SECONDS_BEFORE_END = 15;
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const { token } = useAuth();
   const { toast } = useToast();
-  const { toggleLike } = useLikeSong();
+  const { toggleLike, isLikedSong } = useLikeSong();
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [currentSongLyrics, setCurrentSongLyrics] = useState<
     LyricLine[] | undefined
@@ -1500,6 +1500,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     player,
     song: currentSong,
     isPlaying,
+    isLiked: currentSong != null && isLikedSong(currentSong.id),
     onNext: nextSong,
     onPrevious: prevSong,
     onLike: () => {

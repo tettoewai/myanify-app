@@ -4,9 +4,25 @@ import type { Song } from "@/lib/types";
 import type { AudioMetadata } from "expo-audio";
 import { Image } from "react-native";
 
-const DEFAULT_ARTWORK_URL = Image.resolveAssetSource(
-  require("@/assets/images/icon.png"),
-).uri;
+const DEFAULT_ARTWORK_URL: string | undefined = (() => {
+  // Module-scope resolve can throw outside the native runtime (e.g. web);
+  // and the MediaSession service can only decode file/http(s) artwork, so
+  // fall back to "no large icon" rather than a URI that breaks per OS version.
+  try {
+    const uri = Image.resolveAssetSource(
+      require("@/assets/images/icon.png"),
+    )?.uri;
+    return typeof uri === "string" && uri.length > 0 ? uri : undefined;
+  } catch {
+    return undefined;
+  }
+})();
+
+function isLocalHost(url: string): boolean {
+  return /^(https?:\/\/)?(localhost|127\.0\.0\.1|10\.0\.2\.2)([:/]|$)/i.test(
+    url,
+  );
+}
 
 function toAbsoluteUrl(url: string): string {
   if (/^(https?|file):\/\//i.test(url)) return url;
@@ -14,8 +30,20 @@ function toAbsoluteUrl(url: string): string {
   return url.startsWith("/") ? `${origin}${url}` : `${origin}/${url}`;
 }
 
+/**
+ * Android 9+ blocks cleartext (http) by default and the notification service
+ * has no cleartext exception — http artwork silently fails on newer Android.
+ * Upgrade remote http to https (dev localhost/10.0.2.2 stays http).
+ */
+function ensureHttpsForRemote(url: string): string {
+  if (/^http:\/\//i.test(url) && !isLocalHost(url)) {
+    return url.replace(/^http:\/\//i, "https://");
+  }
+  return url;
+}
+
 function proxyImageUrlIfNeeded(url: string): string {
-  const absolute = toAbsoluteUrl(url);
+  const absolute = ensureHttpsForRemote(toAbsoluteUrl(url));
   if (absolute.includes("mega.nz") || absolute.includes("mega.co.nz")) {
     return `${getAppUrl()}/api/images/proxy?url=${encodeURIComponent(absolute)}`;
   }
@@ -43,14 +71,18 @@ export function getAlbumDisplayName(song: Song): string {
 /** Build lock-screen / notification metadata aligned with web `useMediaSession`. */
 export function buildNotificationMetadata(song: Song): AudioMetadata {
   const cover = getSongCoverUrl(song);
+  // Omit artwork when unknown — matches web placeholder behavior closely
+  // enough while guaranteeing the notification renders on every Android
+  // version (a broken artwork URL can blank the whole notification on
+  // some OEM skins).
   const artworkUrl = cover?.trim()
     ? optimizeArtworkForNotification(proxyImageUrlIfNeeded(cover))
     : DEFAULT_ARTWORK_URL;
 
   return {
-    title: song.title,
+    title: song.title?.trim() || "Unknown Title",
     artist: getArtistDisplayName(song),
     albumTitle: getAlbumDisplayName(song),
-    artworkUrl,
+    ...(artworkUrl ? { artworkUrl } : {}),
   };
 }

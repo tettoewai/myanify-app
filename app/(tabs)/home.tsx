@@ -1,4 +1,5 @@
 import { LoadingView } from "@/components/LoadingSpinner";
+import { DisclaimerNotice } from "@/components/DisclaimerNotice";
 import { SignInPrompt } from "@/components/auth/SignInPrompt";
 import {
   StyledImage as Image,
@@ -43,6 +44,8 @@ interface HomeData {
   featuredPlaylists: Playlist[];
   genres: Genre[];
   recentlyPlayed: any[];
+  forYou?: any[];
+  forYouPersonalized?: boolean;
 }
 
 // Skeleton loading components
@@ -234,6 +237,8 @@ export default function Home() {
   const recentlyPlayed: Song[] = (homeData.recentlyPlayed || []).map(
     formatSongFromApi,
   );
+  const forYouSongs: Song[] = (homeData.forYou || []).map(formatSongFromApi);
+  const forYouPersonalized = homeData.forYouPersonalized ?? false;
   const popularArtists: Artist[] = homeData.popularArtists || [];
   const featuredAlbums: Album[] = homeData.featuredAlbums || [];
   const featuredPlaylists: Playlist[] = homeData.featuredPlaylists || [];
@@ -339,6 +344,11 @@ export default function Home() {
             </TouchableOpacity>
           </View>
         </LinearGradient>
+
+        {/* Non-commercial disclaimer — visible without scrolling */}
+        <View className="px-4 pt-1">
+          <DisclaimerNotice />
+        </View>
 
         <View className="pt-4 gap-y-7">
           {/* Featured Song Hero */}
@@ -543,6 +553,73 @@ export default function Home() {
                           {index + 1}
                         </Text>
                       </View>
+                      <TouchableOpacity
+                        onPress={(e) => handleToggleLike(song, e)}
+                        className="absolute top-2 right-2 bg-black/60 rounded-full p-1.5"
+                      >
+                        <Ionicons
+                          name={
+                            isLikedSong(song.id) ? "heart" : "heart-outline"
+                          }
+                          size={16}
+                          color={isLikedSong(song.id) ? "#ff0000" : "#fff"}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                    <Text
+                      className="text-foreground font-bold text-sm mt-2 leading-loose"
+                      numberOfLines={1}
+                    >
+                      {song.title}
+                    </Text>
+                    <Text
+                      className="text-muted-foreground text-xs mt-0.5 leading-loose"
+                      numberOfLines={1}
+                    >
+                      {song.artists.map((a: any) => a.artist.name).join(", ")}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </Section>
+          )}
+
+          {/* Made For You — personalized by genre / mood / tags */}
+          {forYouSongs.length > 0 && (
+            <Section
+              title="Made For You"
+              subtitle={
+                forYouPersonalized
+                  ? "Picked from your taste"
+                  : "Trending picks — like songs to personalize"
+              }
+              icon="sparkles"
+              iconColor="#ff0000"
+            >
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 4, gap: 12 }}
+              >
+                {forYouSongs.map((song) => (
+                  <TouchableOpacity
+                    key={song.id}
+                    onPress={() => handlePlaySong(song, forYouSongs)}
+                    onLongPress={() => handleLongPressSong(song)}
+                    activeOpacity={0.8}
+                    className="w-[160px]"
+                  >
+                    <View className="relative">
+                      <Image
+                        uri={
+                          getSongCoverUrl(song) ??
+                          "https://placehold.co/160x160/333/ff0000?text=No+Cover"
+                        }
+                        variant="album"
+                        className="w-[160px] h-[160px] rounded-2xl"
+                        contentFit="cover"
+                        transition={200}
+                      />
                       <TouchableOpacity
                         onPress={(e) => handleToggleLike(song, e)}
                         className="absolute top-2 right-2 bg-black/60 rounded-full p-1.5"

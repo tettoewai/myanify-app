@@ -61,6 +61,10 @@ export function formatSongFromApi(song: any): Song {
     audioUrl,
     playbackUrl: song.playbackUrl || getPlaybackUrl(audioUrl),
     genre: song.genre?.name || song.genre || "",
+    language: song.language ?? null,
+    mood: song.mood ?? null,
+    tags: Array.isArray(song.tags) ? song.tags : [],
+    _reason: song._reason ?? null,
     lyrics: formatLyricsFromApi(song.lyrics),
     isPremium: song.isPremium || false,
   };

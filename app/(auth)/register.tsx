@@ -2,6 +2,8 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
 import { AppColors } from "@/lib/colors";
+import { useSpotifyAuthRequest, getSpotifyAuthSuccess, SPOTIFY_LOGIN_ENABLED } from "@/lib/spotify-auth";
+import type * as AuthSession from "expo-auth-session";
 import { Ionicons } from "@expo/vector-icons";
 import {
   GoogleSignin,
@@ -30,6 +32,14 @@ export default function Register() {
   const [isVisible, setIsVisible] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState("");
+  const {
+    request: spotifyRequest,
+    response: spotifyResponse,
+    promptAsync: promptSpotifyAsync,
+    clientId: spotifyClientId,
+    redirectUri: spotifyRedirectUri,
+    isReady: isSpotifyReady,
+  } = useSpotifyAuthRequest();
 
   useEffect(() => {
     GoogleSignin.configure({
@@ -100,6 +110,121 @@ export default function Register() {
       });
     },
   });
+
+  const spotifyLoginMutation = useMutation({
+    mutationFn: async ({
+      code,
+      codeVerifier,
+      redirectUri,
+    }: {
+      code: string;
+      codeVerifier: string;
+      redirectUri: string;
+    }) => {
+      const response = await apiClient.post("/auth/spotify-login", {
+        code,
+        codeVerifier,
+        redirectUri,
+      });
+      if (!response.token) {
+        throw new Error("Invalid response from server");
+      }
+      return response.token;
+    },
+    onSuccess: async (appSessionToken) => {
+      toast.show({
+        variant: "success",
+        label: "Account Created",
+        description: "You've successfully signed in with Spotify.",
+        icon: <Ionicons name="checkmark-circle" size={24} color="white" />,
+      });
+      await signIn(appSessionToken);
+    },
+    onError: (error: any) => {
+      toast.show({
+        variant: "danger",
+        label: "Spotify Sign Up Failed",
+        description: error.message || "Something went wrong with Spotify login",
+        icon: <Ionicons name="alert-circle" size={24} color="white" />,
+      });
+    },
+  });
+
+  const handleSpotifyResult = (
+    result: AuthSession.AuthSessionResult | null | undefined,
+  ) => {
+    const success = getSpotifyAuthSuccess(
+      result,
+      spotifyRequest,
+      spotifyRedirectUri,
+    );
+    if (success) {
+      spotifyLoginMutation.mutate(success);
+      return;
+    }
+    if (result?.type === "error") {
+      const error = (result as { error?: { message?: string } }).error;
+      console.error("Spotify auth error:", error, {
+        redirectUri: spotifyRedirectUri,
+      });
+      toast.show({
+        variant: "danger",
+        label: "Spotify Sign Up Error",
+        description:
+          error?.message || "Spotify authorization failed. Please try again.",
+      });
+    } else if (result?.type === "dismiss" || result?.type === "cancel") {
+      console.log("Spotify auth dismissed:", result.type);
+    } else if (result?.type === "success") {
+      console.error("Spotify auth missing code/verifier:", result.params, {
+        redirectUri: spotifyRedirectUri,
+        hasCodeVerifier: !!spotifyRequest?.codeVerifier,
+      });
+      toast.show({
+        variant: "danger",
+        label: "Spotify Sign Up Error",
+        description:
+          "Spotify didn't return an authorization code. Please try again.",
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (spotifyResponse) handleSpotifyResult(spotifyResponse);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spotifyResponse]);
+
+  const handleSpotifyLogin = async () => {
+    // Spotify login disabled via SPOTIFY_LOGIN_ENABLED in lib/spotify-auth.ts
+    if (!SPOTIFY_LOGIN_ENABLED) return;
+    if (!spotifyClientId) {
+      toast.show({
+        variant: "danger",
+        label: "Spotify Not Configured",
+        description:
+          "EXPO_PUBLIC_SPOTIFY_CLIENT_ID is missing. Add it to .env",
+      });
+      return;
+    }
+    if (!isSpotifyReady || !spotifyRequest) {
+      toast.show({
+        variant: "warning",
+        label: "Spotify Not Ready",
+        description: "Still preparing Spotify login. Please try again.",
+      });
+      return;
+    }
+    try {
+      const result = await promptSpotifyAsync();
+      handleSpotifyResult(result);
+    } catch (error: any) {
+      toast.show({
+        variant: "danger",
+        label: "Spotify Sign Up Error",
+        description: error.message || "An unknown error occurred",
+      });
+    }
+  };
 
   const handleGoogleLogin = async () => {
     try {
@@ -274,6 +399,31 @@ export default function Register() {
               </>
             )}
           </Button>
+          {/* Spotify login disabled via SPOTIFY_LOGIN_ENABLED in lib/spotify-auth.ts */}
+          {SPOTIFY_LOGIN_ENABLED && (
+            <Button
+              variant="tertiary"
+              feedbackVariant="scale-ripple"
+              className="w-full rounded-sm mt-2"
+              size="sm"
+              onPress={handleSpotifyLogin}
+              isDisabled={spotifyLoginMutation.isPending || !isSpotifyReady}
+            >
+              {spotifyLoginMutation.isPending ? (
+                <LoadingSpinner size="sm" color="#ffffff" />
+              ) : (
+                <>
+                  <Ionicons
+                    name="musical-notes"
+                    size={18}
+                    color={AppColors.iconOnDark}
+                    className="mr-2"
+                  />
+                  <Button.Label>Continue with Spotify</Button.Label>
+                </>
+              )}
+            </Button>
+          )}
         </View>
         <View className="relative mt-2 flex-row items-center justify-center">
           <View className="absolute w-full h-px bg-border" />

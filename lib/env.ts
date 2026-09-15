@@ -5,6 +5,7 @@ type AppExtra = {
   apiUrl?: string;
   appUrl?: string;
   cloudinaryCloudName?: string;
+  spotifyClientId?: string;
   vercelBypassToken?: string;
   releasePublicKey?: string;
   releaseRepo?: string;
@@ -53,6 +54,13 @@ export function getCloudinaryCloudName(): string {
     "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME",
     "cloudinaryCloudName",
   );
+}
+
+export function getSpotifyClientId(): string | null {
+  const v =
+    process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID ||
+    (Constants.expoConfig?.extra as AppExtra)?.spotifyClientId;
+  return v?.trim() ? v.trim() : null;
 }
 
 export function getVercelBypassToken(): string | null {
