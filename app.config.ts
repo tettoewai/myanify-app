@@ -30,6 +30,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
 
   return {
     ...config,
+    runtimeVersion: config.version,
     extra: {
       ...config.extra,
       apiUrl,
