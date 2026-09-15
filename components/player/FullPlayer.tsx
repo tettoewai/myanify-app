@@ -6,7 +6,10 @@ import { MoreOptionsSheet } from "@/components/player/MoreOptionsSheet";
 import { EnhancedLyrics } from "@/components/player/EnhancedLyrics";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { getSongCoverUrl } from "@/lib/song-cover";
-import { findLyricIndexByTime } from "@/hooks/useSyncedLyrics";
+import {
+  findLyricIndexByTime,
+  SYNC_LEAD_SECONDS,
+} from "@/hooks/useSyncedLyrics";
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import * as Haptics from "expo-haptics";
@@ -116,16 +119,18 @@ export function FullPlayer() {
     lastContextTimeRef.current = contextCurrentTime;
   }, [contextCurrentTime, isPlaying, isSliding]);
 
-  // High-frequency time updates for smooth lyrics synchronization
+  // Interpolate between native status updates so lyric changes stay aligned
+  // even when Android throttles JS updates while the player is visible.
   useEffect(() => {
     if (!isPlaying || duration <= 0) return;
 
     const baseTime = contextTimeRef.current;
     baseTimeRef.current = baseTime;
-    const startTime = Date.now();
+    const startTime = globalThis.performance?.now?.() ?? Date.now();
 
     const intervalId = setInterval(() => {
-      const elapsed = (Date.now() - startTime) / 1000;
+      const now = globalThis.performance?.now?.() ?? Date.now();
+      const elapsed = (now - startTime) / 1000;
       const interpolated = baseTime + elapsed;
       // Guard against drift: if the engine moved on (seek from elsewhere),
       // prefer engine time over extrapolation.
@@ -133,10 +138,10 @@ export function FullPlayer() {
       const candidate =
         Math.abs(interpolated - engineTime) > 1.0 ? engineTime : interpolated;
       setLocalCurrentTime(Math.min(candidate, durationRef.current));
-    }, 100);
+    }, 50);
 
     return () => clearInterval(intervalId);
-  }, [isPlaying, duration, seekTick]);
+  }, [currentSong?.id, isPlaying, duration, seekTick]);
 
   useEffect(() => {
     if (!currentSong) return;
@@ -177,7 +182,7 @@ export function FullPlayer() {
 
   const currentLyric = useMemo(() => {
     if (!lyrics.length) return null;
-    const targetTime = Math.max(0, currentTime + 0.12);
+    const targetTime = Math.max(0, currentTime + SYNC_LEAD_SECONDS);
     const index = findLyricIndexByTime(lyrics, targetTime);
     return index !== -1 ? lyrics[index] : null;
   }, [lyrics, currentTime]);

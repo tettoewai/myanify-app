@@ -1,18 +1,57 @@
 import { LoadingView } from "@/components/LoadingSpinner";
 import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import { Link, Redirect } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { Button } from "heroui-native";
 import { ScrollView, Text, View } from "react-native";
+import { getAppUrl } from "@/lib/env";
+import { useEffect, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function Index() {
   const { token, isLoading } = useAuth();
+  const router = useRouter();
+  const [checkingConnection, setCheckingConnection] = useState(false);
   const insets = useSafeAreaInsets();
 
-  // Redirect immediately without showing loading screen
+  useEffect(() => {
+    if (!token) {
+      setCheckingConnection(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingConnection(true);
+
+    const checkConnection = async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2500);
+      try {
+        await fetch(getAppUrl(), {
+          method: "HEAD",
+          signal: controller.signal,
+        });
+        if (!cancelled) router.replace("/(tabs)/home");
+      } catch {
+        if (!cancelled) router.replace("/downloads");
+      } finally {
+        clearTimeout(timeout);
+        if (!cancelled) setCheckingConnection(false);
+      }
+    };
+
+    void checkConnection();
+    return () => {
+      cancelled = true;
+    };
+  }, [router, token]);
+
+  if (token && (isLoading || checkingConnection)) {
+    return <LoadingView />;
+  }
+
   if (token) {
-    return <Redirect href="/(tabs)/home" />;
+    return null;
   }
 
   if (isLoading) {

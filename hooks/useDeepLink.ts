@@ -23,6 +23,20 @@ export function useDeepLink(isAuthenticated: boolean) {
 
   authRef.current = isAuthenticated;
 
+  const navigateToTarget = useCallback(
+    (target: DeepLinkTarget) => {
+      // The notification points to the singleton Now Playing route. `push`
+      // would create another full-screen modal every time the notification is
+      // tapped while the player is already open.
+      if (target.slug === "player") {
+        router.navigate(target.href);
+        return;
+      }
+      router.push(target.href);
+    },
+    [router],
+  );
+
   const handleUrl = useCallback(
     (rawUrl?: string) => {
       if (!rawUrl) return;
@@ -33,7 +47,7 @@ export function useDeepLink(isAuthenticated: boolean) {
       // Pre-auth flows (verify email / reset password) don't need a session —
       // open them immediately so email links work on a fresh install.
       if (target.publicAuth) {
-        router.push(target.href);
+        navigateToTarget(target);
         return;
       }
 
@@ -41,10 +55,10 @@ export function useDeepLink(isAuthenticated: boolean) {
       setPending(target);
 
       if (authRef.current) {
-        router.push(target.href);
+        navigateToTarget(target);
       }
     },
-    [router],
+    [navigateToTarget],
   );
 
   useEffect(() => {
@@ -67,9 +81,9 @@ export function useDeepLink(isAuthenticated: boolean) {
       const target = pendingRef.current;
       pendingRef.current = null;
       setPending(null);
-      router.push(target.href);
+      navigateToTarget(target);
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, navigateToTarget]);
 
   return { pending };
 }

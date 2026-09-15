@@ -18,6 +18,7 @@ import {
   type PersistedQueueEntry,
 } from "@/lib/queue";
 import { useLockScreenPlayer } from "@/hooks/useLockScreenPlayer";
+import { downloadManager } from "@/lib/vip-offline";
 import { useLikeSong } from "@/hooks/useLikeSong";
 import { fetchSongLyrics } from "@/lib/song-lyrics";
 import type { LyricLine, QueueItem, QueueItemSource, Song } from "@/lib/types";
@@ -982,7 +983,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         toast.show({ label: "Please log in to play music", variant: "danger" });
         return;
       }
-      if (!getSongStreamUrl(song)) {
+      const streamUrl = getSongStreamUrl(song);
+      let downloadedFile: string | null = null;
+      if (!streamUrl) {
+        downloadedFile = await downloadManager
+          .getDownloadedFile(song.id)
+          .catch(() => null);
+      }
+      if (!streamUrl && !downloadedFile) {
         setError("No audio source available");
         toast.show({ label: "No audio source available", variant: "danger" });
         return;
@@ -1024,6 +1032,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         applyUpNext(
           createQueueItems(options.upNext, options.source ?? "playlist"),
         );
+        setQueue([song, ...options.upNext]);
       }
 
       const hasUpNext =

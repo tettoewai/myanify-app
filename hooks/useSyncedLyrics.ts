@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import type { LyricLine } from '@/lib/types';
 
 // Lead time to make lyrics feel more on-beat (in seconds)
@@ -11,14 +11,12 @@ export function findLyricIndexByTime(
 ): number {
     if (!lyrics.length) return -1;
 
-    const times = lyrics.map((l) => l.time);
     let lo = 0;
-    let hi = times.length - 1;
+    let hi = lyrics.length - 1;
 
     while (lo <= hi) {
         const mid = (lo + hi) >> 1;
-        if (times[mid] === time) return mid;
-        if (times[mid] < time) {
+        if (lyrics[mid].time <= time) {
             lo = mid + 1;
         } else {
             hi = mid - 1;
@@ -37,6 +35,10 @@ export function useSyncedLyrics(
     const [currentLyricIndex, setCurrentLyricIndex] = useState(-1);
     const [seekToken, setSeekToken] = useState(0);
     const previousSongIdRef = useRef<string | undefined>(songId);
+    const normalizedLyrics = useMemo(
+        () => lyrics.map((line) => ({ ...line, time: Math.max(0, line.time) })),
+        [lyrics],
+    );
 
     useEffect(() => {
         if (!lyrics.length) {
@@ -45,12 +47,12 @@ export function useSyncedLyrics(
         }
 
         const targetTime = Math.max(0, currentTime + SYNC_LEAD_SECONDS);
-        const index = findLyricIndexByTime(lyrics, targetTime);
+        const index = findLyricIndexByTime(normalizedLyrics, targetTime);
 
         if (index !== currentLyricIndex) {
             setCurrentLyricIndex(index);
         }
-    }, [lyrics, currentTime, currentLyricIndex]);
+    }, [normalizedLyrics, lyrics.length, currentTime, currentLyricIndex]);
 
     // Reset when song changes
     useEffect(() => {
