@@ -2,7 +2,7 @@
   "expo": {
     "name": "Myanify",
     "slug": "myanify-app",
-    "version": "1.0.14",
+    "version": "1.0.13",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myanify",
@@ -58,7 +58,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "versionCode": 33,
+      "versionCode": 34,
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.tlab.myanify"
